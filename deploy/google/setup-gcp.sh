@@ -14,7 +14,7 @@ GAR_REPOSITORY="saude-monitor-google"
 # Repositorio do backend desde 29/10/2026 (antes, o monorepo GabrielVogado/saude-monitor).
 # Projeto ja provisionado: a troca de repositorio esta em deploy/google/README.md
 # ("Mudanca de repositorio"), com os dois comandos que liberam o repositorio novo.
-GITHUB_REPO="devpointinnovations/radar-saude-backend"
+GITHUB_REPO="devpointinnovations/pulseira-verde-backend"
 
 DEPLOYER_SA="saude-monitor-gitdeploy@${PROJECT_ID}.iam.gserviceaccount.com"
 RUNTIME_SA="saude-monitor-run@${PROJECT_ID}.iam.gserviceaccount.com"

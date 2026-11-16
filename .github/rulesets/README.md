@@ -3,7 +3,7 @@
 Estes JSON são importáveis em **Settings → Rules → Rulesets → New ruleset →
 Import a ruleset**.
 
-> Repositório `devpointinnovations/radar-saude-backend` desde 29/10/2026. O histórico
+> Repositório `devpointinnovations/pulseira-verde-backend` desde 29/10/2026. O histórico
 > abaixo (datas de setembro, um colaborador só) vem do monorepo
 > `GabrielVogado/saude-monitor`, de onde este repositório foi separado. Aqui o check
 > exigido é o `Backend (Spring Boot)`; os de mobile e admin ficam nos repositórios deles.
