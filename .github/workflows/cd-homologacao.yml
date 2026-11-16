@@ -2,7 +2,7 @@
 #
 # Decisao do PO em 22/09/2026: `master` = homologacao; producao fica para `release/<tag>`.
 # Desde 29/10/2026 o backend tem repositorio proprio e homologa sozinho; o APK de
-# homologacao sai do radar-saude-mobile, com a rc dele, e aponta para a URL fixa abaixo.
+# homologacao sai do pulseira-verde-mobile, com a rc dele, e aponta para a URL fixa abaixo.
 #
 #   push em master
 #     -> versao   calcula vX.Y.Z-rc.N (X.Y.Z do `version` do build.gradle, N = proxima rc livre)

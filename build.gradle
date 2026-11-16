@@ -154,7 +154,7 @@ tasks.named('check') {
  * SonarQube Cloud. A análise roda no CI depois do `build`, que já deixou as
  * classes compiladas e o XML do JaCoCo. Organização e chave precisam ser
  * exatamente as criadas no SonarQube Cloud (Documentos/10-git-flow/MANUAL.md §4.4,
- * no radar-saude-docs). Organização devpointinnovations desde 29/10/2026.
+ * no pulseira-verde-docs). Organização devpointinnovations desde 29/10/2026.
  */
 sonar {
 	properties {
