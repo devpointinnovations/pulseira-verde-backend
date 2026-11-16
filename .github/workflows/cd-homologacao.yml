@@ -139,7 +139,7 @@ jobs:
           MUDANCAS=$(gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" "${ARGS[@]}" --jq .body)
 
           {
-            echo "## Radar Saúde Backend HML $VERSION_NAME"
+            echo "## Pulseira Verde Backend HML $VERSION_NAME"
             echo ""
             echo "- **Backend de homologação:** $API_URL_HOM"
             echo "- **Commit:** \`${GITHUB_SHA:0:7}\` (imagem no Artifact Registry com esta SHA)"
@@ -151,7 +151,7 @@ jobs:
             -R "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --prerelease \
-            --title "Radar Saúde Backend HML $VERSION_NAME" \
+            --title "Pulseira Verde Backend HML $VERSION_NAME" \
             --notes-file notas.md
 
           URL="https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG"

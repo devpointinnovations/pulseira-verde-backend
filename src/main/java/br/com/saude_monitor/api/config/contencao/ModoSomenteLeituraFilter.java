@@ -29,7 +29,7 @@ public class ModoSomenteLeituraFilter extends OncePerRequestFilter {
 
     static final String CODIGO = "MODO_SOMENTE_LEITURA";
     static final String MENSAGEM_PADRAO =
-            "O Radar Saúde está em manutenção e só aceita consultas agora. Tente de novo em alguns minutos.";
+            "A Pulseira Verde está em manutenção e só aceita consultas agora. Tente de novo em alguns minutos.";
 
     private static final Set<String> GRAVACOES = Set.of("POST", "PUT", "PATCH", "DELETE");
 
@@ -37,6 +37,10 @@ public class ModoSomenteLeituraFilter extends OncePerRequestFilter {
             "/api/v1/auth/login",
             "/api/v1/auth/refresh",
             "/api/v1/auth/logout",
+            // Sessão do Painel Admin (ADR-013): sem ela o administrador não entra no painel.
+            "/api/v1/auth/painel/login",
+            "/api/v1/auth/painel/refresh",
+            "/api/v1/auth/painel/logout",
             "/api/v1/admin/configuracao");
 
     private final ConfiguracaoRemotaService configuracaoRemotaService;

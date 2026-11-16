@@ -88,6 +88,7 @@ jobs:
 
       - name: Análise SonarQube Cloud (backend)
         if: env.TEM_SONAR == 'true'
+        timeout-minutes: 10
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         # Reaproveita as classes e o XML do JaCoCo gerados pelo `build` acima.

@@ -88,6 +88,15 @@ Duas identidades, de proposito:
 
 Nao-sensivel, via `env_vars` do workflow: `MONGO_DATABASE`, `MONGO_AUTH_DB`.
 
+CORS do navegador (nao-sensivel, `env_vars`): `APP_CORS_ALLOWED_ORIGINS` (lista de origens
+exatas, sem credenciais) e `APP_CORS_PAINEL_ORIGIN` (ADR-013, 05/11/2026): a origem exata do
+Painel Admin, a unica com CORS com credenciais e so em `/api/v1/auth/painel/**`, onde o refresh vai
+no cookie `__Host-painel_refresh`. Uma origem so, sem `*` nem caminho, ou a aplicacao nao sobe.
+Hoje nenhum workflow define as duas e vale o padrao de desenvolvimento (`http://localhost:4200`
+para o painel). Com o dominio proprio, definir `APP_CORS_PAINEL_ORIGIN` com a origem do painel
+publicada no mesmo site da API: com `SameSite=Strict`, o cookie nao funciona entre dois servicos
+`run.app` (sufixo publico), e o painel perde a sessao ao recarregar a aba.
+
 Sensivel, via Secret Manager (`secrets` do workflow): `MONGO_URI` e `JWT_SECRET`
 -- os nomes conforme existem no projeto, sem sufixo em `dev`, `_HOM` em homologacao e
 `_PROD` em producao. `RESEND_API_KEY` segue o mesmo padrao. Nunca em `env_vars`: valores ali ficam legiveis em texto claro na
@@ -105,6 +114,55 @@ gcloud secrets create ADMIN_SENHA --data-file=- --replication-policy=automatic  
 ```
 
 e entao trocar `APP_SEEDADMIN_ENABLED=false` por `APP_SEEDADMIN_ENABLED=true` e essas duas entradas em `secrets:`.
+
+## Rotacao da chave do JWT (SEG-04, 09/11/2026)
+
+O backend aceita mais de uma chave ao mesmo tempo. O token novo leva no cabecalho o `kid` da
+chave ativa, e a validacao escolhe a chave pelo `kid`. Assim a troca de chave nao derruba as
+sessoes (o refresh vale 30 dias).
+
+- `JWT_CHAVES`: JSON `{"kid": "segredo"}`, cada segredo com pelo menos 32 bytes, `kid` com
+  letras, numeros, `.`, `_` ou `-` (ate 64). Sugestao de `kid`: o mes da criacao (`2026-11`).
+- `JWT_CHAVE_ATIVA`: o `kid` que assina os tokens novos. Precisa existir em `JWT_CHAVES`.
+- `JWT_SECRET`: chave legada, sem `kid`. Assina enquanto nao houver chave ativa e valida os
+  tokens sem `kid` emitidos antes da primeira rotacao.
+
+A aplicacao nao sobe com chave curta, JSON invalido, `kid` fora do padrao, chave ativa fora do
+mapa ou nenhuma chave para assinar. As mensagens citam o `kid`, nunca o segredo.
+
+Hoje o workflow passa so `JWT_SECRET`, e todos os ambientes seguem assinando sem `kid`, como
+antes. Os dois secrets novos seguem o padrao de sufixo (`JWT_CHAVES`, `JWT_CHAVES_HOM`,
+`JWT_CHAVES_PROD`, idem `JWT_CHAVE_ATIVA`), com acesso de leitura para `saude-monitor-run@`.
+
+Gerar um segredo e publicar uma versao do JSON:
+
+```bash
+openssl rand -base64 48 | tr -d '\n'
+printf '{"2026-11":"SEGREDO"}' | gcloud secrets versions add JWT_CHAVES_HOM --data-file=-
+```
+
+**Primeira rotacao (sair da chave legada)**, em tres deploys:
+
+1. Publicar sem ativar: criar `JWT_CHAVES` com a chave nova e incluir no `cd-backend-google.yml`
+   so a linha `JWT_CHAVES=JWT_CHAVES<sufixo>:latest`. Todas as instancias passam a conhecer a
+   chave nova, mas a legada continua assinando.
+2. Ativar no deploy seguinte: criar `JWT_CHAVE_ATIVA` com o `kid` e incluir a linha dela. Os
+   tokens novos saem com `kid`; os antigos, sem `kid`, continuam validos pela legada.
+3. Retirar a legada 30 dias depois da ativacao em todos os ambientes, num PR que tira
+   `JWT_SECRET` do workflow **e** o valor padrao de `app.jwt.secret` no
+   `application.properties`. So tirar a linha do workflow nao basta: sem a variavel vale o
+   padrao de desenvolvimento, que esta no repositorio e passaria a validar tokens sem `kid`.
+
+**Rotacoes seguintes**, so com versoes novas dos secrets e um deploy por passo:
+
+1. Nova versao de `JWT_CHAVES` com a chave antiga e a nova; deploy.
+2. Nova versao de `JWT_CHAVE_ATIVA` com o `kid` novo; deploy.
+3. Depois de 30 dias, nova versao de `JWT_CHAVES` sem a chave antiga; deploy. Quem ainda tiver
+   token dela faz login de novo.
+
+Publicar antes de ativar evita que uma instancia ainda na revisao anterior receba um token com
+um `kid` que ela nao conhece. Em caso de vazamento, pular a espera: publicar e ativar a chave
+nova no mesmo deploy e retirar a vazada logo em seguida, aceitando que todos facam login de novo.
 
 ## Sonda de startup (23/10/2026)
 

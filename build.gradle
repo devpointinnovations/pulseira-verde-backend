@@ -161,7 +161,7 @@ sonar {
 		property 'sonar.host.url', 'https://sonarcloud.io'
 		property 'sonar.organization', 'devpointinnovations'
 		property 'sonar.projectKey', 'devpointinnovations_radar-saude-backend'
-		property 'sonar.projectName', 'Radar Saúde - Backend'
+		property 'sonar.projectName', 'Pulseira Verde - Backend'
 		property 'sonar.coverage.jacoco.xmlReportPaths',
 			layout.buildDirectory.file('reports/jacoco/test/jacocoTestReport.xml').get().asFile.path
 		// Mesmo recorte da cobertura do JaCoCo acima.

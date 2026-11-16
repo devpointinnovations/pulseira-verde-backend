@@ -1,4 +1,4 @@
-# Radar Saúde — Backend
+# Pulseira Verde — Backend
 
 API REST em Spring Boot 4 com Java 25, responsavel por receber e persistir dados de autenticacao no MongoDB (Percona Server for MongoDB 7.0).
 
