@@ -166,5 +166,8 @@ sonar {
 			layout.buildDirectory.file('reports/jacoco/test/jacocoTestReport.xml').get().asFile.path
 		// Mesmo recorte da cobertura do JaCoCo acima.
 		property 'sonar.coverage.exclusions', excluidosDaCobertura.join(',')
+		// No monorepo a análise via só a pasta backend/; aqui a raiz também tem os scripts do CI,
+		// o deploy e os testes de carga, que não são código do produto nem têm cobertura.
+		property 'sonar.exclusions', '.github/**,deploy/**,perf/**'
 	}
 }
