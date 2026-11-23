@@ -15,12 +15,12 @@ import br.com.saude_monitor.api.feedback.repository.FeedbackRepository;
 import br.com.saude_monitor.api.feedback.service.FeedbackService;
 import br.com.saude_monitor.api.hospital.document.HospitalDocument;
 import br.com.saude_monitor.api.hospital.dto.PageResponse;
-import br.com.saude_monitor.api.hospital.repository.HospitalRepository;
+import br.com.saude_monitor.api.hospital.service.HospitalConsulta;
 import br.com.saude_monitor.api.visita.document.StatusVisita;
 import br.com.saude_monitor.api.visita.document.VisitaDocument;
 import br.com.saude_monitor.api.visita.service.VisitaDono;
 import br.com.saude_monitor.api.visita.service.VisitaService;
-import br.com.saude_monitor.api.visita.repository.VisitaRepository;
+import br.com.saude_monitor.api.visita.service.VisitaConsulta;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
@@ -79,8 +79,8 @@ public class FeedbackServiceImpl implements FeedbackService {
             List.of(StatusVisita.FINALIZADA, StatusVisita.GPS_INTERROMPIDO);
 
     private final FeedbackRepository feedbackRepository;
-    private final VisitaRepository visitaRepository;
-    private final HospitalRepository hospitalRepository;
+    private final VisitaConsulta visitaConsulta;
+    private final HospitalConsulta hospitalConsulta;
     private final ApplicationEventPublisher eventPublisher;
     private final MongoTemplate mongoTemplate;
 
@@ -191,7 +191,7 @@ public class FeedbackServiceImpl implements FeedbackService {
 
     @Override
     public List<FeedbackPendenteResponse> pendentes(String usuarioId) {
-        List<VisitaDocument> candidatas = visitaRepository
+        List<VisitaDocument> candidatas = visitaConsulta
                 .findByUsuarioIdAndStatusInAndSaidaAfterOrderBySaidaDesc(
                         usuarioId, STATUS_AVALIAVEIS, Instant.now().minus(JANELA_RESPOSTA))
                 .stream()
@@ -224,7 +224,7 @@ public class FeedbackServiceImpl implements FeedbackService {
     @Override
     public void processarSemResposta() {
         Instant limite = Instant.now().minus(JANELA_RESPOSTA);
-        List<VisitaDocument> encerradas = visitaRepository
+        List<VisitaDocument> encerradas = visitaConsulta
                 .findByStatusAndSaidaBefore(StatusVisita.FINALIZADA, limite);
 
         // Antes chamava existsByVisitaId dentro do loop (N+1) e salvava a lista inteira,
@@ -269,7 +269,7 @@ public class FeedbackServiceImpl implements FeedbackService {
      * para o app tratar os dois casos como "não está mais disponível".
      */
     private VisitaDocument obterVisitaAvaliavel(String visitaId, String usuarioId, String dispositivoId) {
-        VisitaDocument visita = visitaRepository.findById(visitaId)
+        VisitaDocument visita = visitaConsulta.findById(visitaId)
                 .orElseThrow(() -> new RecursoNaoEncontradoException(
                         "Visita não encontrada para o id informado."));
         // SEG-02: só quem fez a visita avalia. 403, como no BOLA de checkout (F-02). Vem
@@ -341,7 +341,7 @@ public class FeedbackServiceImpl implements FeedbackService {
         Map<String, String> nomes = new HashMap<>();
         List<String> distintos = hospitalIds.stream().filter(Objects::nonNull).distinct().toList();
         if (!distintos.isEmpty()) {
-            for (HospitalDocument hospital : hospitalRepository.findAllById(distintos)) {
+            for (HospitalDocument hospital : hospitalConsulta.findAllById(distintos)) {
                 nomes.putIfAbsent(hospital.getId(), hospital.getNome());
             }
         }
@@ -352,7 +352,7 @@ public class FeedbackServiceImpl implements FeedbackService {
         if (hospitalId == null) {
             return null;
         }
-        return hospitalRepository.findById(hospitalId).map(HospitalDocument::getNome).orElse(null);
+        return hospitalConsulta.findById(hospitalId).map(HospitalDocument::getNome).orElse(null);
     }
 
     /**

@@ -4,13 +4,13 @@ import br.com.saude_monitor.api.indicador.document.IndicadorHospitalDocument;
 import br.com.saude_monitor.api.indicador.repository.IndicadorHospitalRepository;
 import br.com.saude_monitor.api.indicador.service.IndicadorService;
 import br.com.saude_monitor.api.feedback.document.FeedbackDocument;
-import br.com.saude_monitor.api.feedback.repository.FeedbackRepository;
+import br.com.saude_monitor.api.feedback.service.FeedbackConsulta;
 import br.com.saude_monitor.api.hospital.dto.IndicadoresResponse;
-import br.com.saude_monitor.api.hospital.repository.HospitalRepository;
+import br.com.saude_monitor.api.hospital.service.HospitalConsulta;
 import br.com.saude_monitor.api.visita.document.StatusVisita;
 import br.com.saude_monitor.api.visita.document.TipoPermanencia;
 import br.com.saude_monitor.api.visita.document.VisitaDocument;
-import br.com.saude_monitor.api.visita.repository.VisitaRepository;
+import br.com.saude_monitor.api.visita.service.VisitaConsulta;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.mongodb.core.MongoTemplate;
@@ -33,6 +33,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -42,12 +43,12 @@ import static org.mockito.Mockito.when;
 class IndicadorServiceImplTest {
 
     private final IndicadorHospitalRepository indicadorRepository = mock(IndicadorHospitalRepository.class);
-    private final FeedbackRepository feedbackRepository = mock(FeedbackRepository.class);
-    private final VisitaRepository visitaRepository = mock(VisitaRepository.class);
-    private final HospitalRepository hospitalRepository = mock(HospitalRepository.class);
+    private final FeedbackConsulta feedbackConsulta = mock(FeedbackConsulta.class);
+    private final VisitaConsulta visitaConsulta = mock(VisitaConsulta.class);
+    private final HospitalConsulta hospitalConsulta = mock(HospitalConsulta.class);
     private final MongoTemplate mongoTemplate = mock(MongoTemplate.class);
     private final IndicadorService service =
-            new IndicadorServiceImpl(indicadorRepository, feedbackRepository, visitaRepository, hospitalRepository, mongoTemplate);
+            new IndicadorServiceImpl(indicadorRepository, feedbackConsulta, visitaConsulta, hospitalConsulta, mongoTemplate);
 
     /** Visitas que o stub de {@code findAllById} devolve sem prova de presença (SEG-01). */
     private final Set<String> visitasNaoComprovadas = new HashSet<>();
@@ -57,7 +58,7 @@ class IndicadorServiceImplTest {
 
     @BeforeEach
     void setup() {
-        when(visitaRepository.findAllById(any())).thenAnswer(inv -> {
+        when(visitaConsulta.findAllById(any())).thenAnswer(inv -> {
             Iterable<String> ids = inv.getArgument(0);
             List<VisitaDocument> visitas = new ArrayList<>();
             ids.forEach(id -> {
@@ -68,8 +69,8 @@ class IndicadorServiceImplTest {
             });
             return visitas;
         });
-        when(feedbackRepository.findByHospitalIdAndCriadoEmAfterAndNotaNotNull(eq("h1"), any())).thenReturn(List.of());
-        when(visitaRepository.findByHospitalIdAndStatusInAndSaidaBetweenAndTipoPermanencia(
+        when(feedbackConsulta.findByHospitalIdAndCriadoEmAfterAndNotaNotNull(eq("h1"), any())).thenReturn(List.of());
+        when(visitaConsulta.findByHospitalIdAndStatusInAndSaidaBetweenAndTipoPermanencia(
                 eq("h1"), any(), any(), any(), any())).thenReturn(List.of());
     }
 
@@ -81,7 +82,7 @@ class IndicadorServiceImplTest {
 
     @Test
     void recalcularCalculaNotaMediaENAvaliacoes() {
-        when(feedbackRepository.findByHospitalIdAndCriadoEmAfterAndNotaNotNull(eq("h1"), any()))
+        when(feedbackConsulta.findByHospitalIdAndCriadoEmAfterAndNotaNotNull(eq("h1"), any()))
                 .thenReturn(List.of(feedback("h1", 4), feedback("h1", 5), feedback("h1", 3)));
 
         IndicadorHospitalDocument indicador = service.recalcular("h1");
@@ -98,7 +99,7 @@ class IndicadorServiceImplTest {
     void recalcularIgnoraFeedbacksSemNotaDefinida() {
         // Um feedback sem nota (nota null) não conta para média nem N.
         FeedbackDocument semNota = FeedbackDocument.builder().hospitalId("h1").nota(null).build();
-        when(feedbackRepository.findByHospitalIdAndCriadoEmAfterAndNotaNotNull(any(), any()))
+        when(feedbackConsulta.findByHospitalIdAndCriadoEmAfterAndNotaNotNull(any(), any()))
                 .thenReturn(List.of(feedback("h1", 5), semNota));
 
         IndicadorHospitalDocument indicador = service.recalcular("h1");
@@ -114,7 +115,7 @@ class IndicadorServiceImplTest {
         FeedbackDocument comprovado = feedback("h1", 4);
         FeedbackDocument semProva = feedback("h1", 1);
         visitasNaoComprovadas.add(semProva.getVisitaId());
-        when(feedbackRepository.findByHospitalIdAndCriadoEmAfterAndNotaNotNull(eq("h1"), any()))
+        when(feedbackConsulta.findByHospitalIdAndCriadoEmAfterAndNotaNotNull(eq("h1"), any()))
                 .thenReturn(List.of(comprovado, semProva));
 
         IndicadorHospitalDocument indicador = service.recalcular("h1");
@@ -129,7 +130,7 @@ class IndicadorServiceImplTest {
         FeedbackDocument orfao = feedback("h1", 1);
         FeedbackDocument semVisita = FeedbackDocument.builder().hospitalId("h1").nota(1).build();
         visitasInexistentes.add(orfao.getVisitaId());
-        when(feedbackRepository.findByHospitalIdAndCriadoEmAfterAndNotaNotNull(eq("h1"), any()))
+        when(feedbackConsulta.findByHospitalIdAndCriadoEmAfterAndNotaNotNull(eq("h1"), any()))
                 .thenReturn(List.of(comprovado, orfao, semVisita));
 
         IndicadorHospitalDocument indicador = service.recalcular("h1");
@@ -142,7 +143,7 @@ class IndicadorServiceImplTest {
     void recalcularIgnoraTempoDeVisitaSemProvaDePresenca() {
         VisitaDocument semProva = visitaFinalizada(600);
         semProva.setPresencaComprovada(false);
-        when(visitaRepository.findByHospitalIdAndStatusInAndSaidaBetweenAndTipoPermanencia(
+        when(visitaConsulta.findByHospitalIdAndStatusInAndSaidaBetweenAndTipoPermanencia(
                 eq("h1"), any(), any(), any(), any()))
                 .thenReturn(List.of(visitaFinalizada(40), semProva));
 
@@ -166,7 +167,7 @@ class IndicadorServiceImplTest {
 
     @Test
     void recalcularCalculaMedianaDoTempo() {
-        when(visitaRepository.findByHospitalIdAndStatusInAndSaidaBetweenAndTipoPermanencia(
+        when(visitaConsulta.findByHospitalIdAndStatusInAndSaidaBetweenAndTipoPermanencia(
                 eq("h1"), any(), any(), any(), any()))
                 .thenReturn(List.of(visitaFinalizada(30), visitaFinalizada(120), visitaFinalizada(60), visitaFinalizada(90)));
 
@@ -178,7 +179,7 @@ class IndicadorServiceImplTest {
     @Test
     void recalcularExcluiVisitassAcimaDe24h() {
         // 25h (1500min) excede o teto de 24h (RN-16) — sai da métrica.
-        when(visitaRepository.findByHospitalIdAndStatusInAndSaidaBetweenAndTipoPermanencia(
+        when(visitaConsulta.findByHospitalIdAndStatusInAndSaidaBetweenAndTipoPermanencia(
                 eq("h1"), any(), any(), any(), any()))
                 .thenReturn(List.of(visitaFinalizada(60), visitaFinalizada(1500)));
 
@@ -190,7 +191,7 @@ class IndicadorServiceImplTest {
     @Test
     void recalcularExcluiVisitasAbaixoDe2Minutos() {
         // RN-07: visitas com menos de 2 minutos são ruído e não entram nas estatísticas públicas.
-        when(visitaRepository.findByHospitalIdAndStatusInAndSaidaBetweenAndTipoPermanencia(
+        when(visitaConsulta.findByHospitalIdAndStatusInAndSaidaBetweenAndTipoPermanencia(
                 eq("h1"), any(), any(), any(), any()))
                 .thenReturn(List.of(visitaFinalizada(1), visitaFinalizada(2), visitaFinalizada(60)));
 
@@ -204,7 +205,7 @@ class IndicadorServiceImplTest {
         VisitaDocument semDuracao = VisitaDocument.builder()
                 .hospitalId("h1").status(StatusVisita.FINALIZADA)
                 .tipoPermanencia(TipoPermanencia.ATENDIMENTO).duracaoMinutos(null).presencaComprovada(true).build();
-        when(visitaRepository.findByHospitalIdAndStatusInAndSaidaBetweenAndTipoPermanencia(
+        when(visitaConsulta.findByHospitalIdAndStatusInAndSaidaBetweenAndTipoPermanencia(
                 eq("h1"), any(), any(), any(), any()))
                 .thenReturn(List.of(visitaFinalizada(45), semDuracao));
 
@@ -240,7 +241,7 @@ class IndicadorServiceImplTest {
         Instant entrada = Instant.parse("2026-08-01T10:00:00Z");
         Instant saida = Instant.parse("2026-08-01T11:00:00Z");      // 60min
         Instant posicao = Instant.parse("2026-08-01T10:54:00Z");     // 54/60 = 90% → entra (RN-17)
-        when(visitaRepository.findByHospitalIdAndStatusInAndSaidaBetweenAndTipoPermanencia(
+        when(visitaConsulta.findByHospitalIdAndStatusInAndSaidaBetweenAndTipoPermanencia(
                 eq("h1"), any(), any(), any(), any()))
                 .thenReturn(List.of(visitaGpsInterrompido(entrada, saida, posicao)));
 
@@ -254,7 +255,7 @@ class IndicadorServiceImplTest {
         Instant entrada = Instant.parse("2026-08-01T10:00:00Z");
         Instant saida = Instant.parse("2026-08-01T11:00:00Z");      // 60min
         Instant posicao = Instant.parse("2026-08-01T10:20:00Z");     // 20/60 ≈ 33% → NÃO entra (RN-17)
-        when(visitaRepository.findByHospitalIdAndStatusInAndSaidaBetweenAndTipoPermanencia(
+        when(visitaConsulta.findByHospitalIdAndStatusInAndSaidaBetweenAndTipoPermanencia(
                 eq("h1"), any(), any(), any(), any()))
                 .thenReturn(List.of(visitaGpsInterrompido(entrada, saida, posicao)));
 
@@ -300,13 +301,13 @@ class IndicadorServiceImplTest {
 
     @Test
     void obterDetalheRetornaIndisponivelQuandoHospitalNaoExiste() {
-        when(hospitalRepository.existsById("x")).thenReturn(false);
+        when(hospitalConsulta.existsById("x")).thenReturn(false);
         assertThat(service.obterDetalhe("x")).isNull();
     }
 
     @Test
     void obterDetalheRetornaPeriodoEVisitas() {
-        when(hospitalRepository.existsById("h1")).thenReturn(true);
+        when(hospitalConsulta.existsById("h1")).thenReturn(true);
         IndicadorHospitalDocument a = IndicadorHospitalDocument.builder()
                 .hospitalId("h1").notaMedia(4.0).nAvaliacoes(7).tempoMedianoMinutos(80).nVisitas(34)
                 .periodoInicio(Instant.parse("2026-05-10T00:00:00Z"))
@@ -341,9 +342,9 @@ class IndicadorServiceImplTest {
         IndicadorServiceImpl spyService = spy((IndicadorServiceImpl) service);
         doReturn(null).when(spyService).recalcular(anyString());
 
-        when(feedbackRepository.findByCriadoEmAfter(any()))
+        when(feedbackConsulta.findByCriadoEmAfter(any()))
                 .thenReturn(List.of(feedback("h1", 4)));
-        when(visitaRepository.findByStatusInAndProcessadoEmAfter(any(), any()))
+        when(visitaConsulta.findByStatusInAndProcessadoEmAfter(any(), any()))
                 .thenReturn(List.of(visitaFinalizadaDe("h2")));
 
         spyService.recalcularPendentes();
@@ -351,7 +352,7 @@ class IndicadorServiceImplTest {
         verify(spyService).recalcular("h1");
         verify(spyService).recalcular("h2");
         verify(spyService, never()).recalcular("h3");
-        verify(hospitalRepository, never()).findAllByAtivoTrue();
+        verifyNoInteractions(hospitalConsulta);
     }
 
     /**
@@ -375,8 +376,8 @@ class IndicadorServiceImplTest {
                 .saida(Instant.now().minus(java.time.Duration.ofDays(3)))
                 .processadoEm(Instant.now())
                 .build();
-        when(feedbackRepository.findByCriadoEmAfter(any())).thenReturn(List.of());
-        when(visitaRepository.findByStatusInAndProcessadoEmAfter(any(), any()))
+        when(feedbackConsulta.findByCriadoEmAfter(any())).thenReturn(List.of());
+        when(visitaConsulta.findByStatusInAndProcessadoEmAfter(any(), any()))
                 .thenReturn(List.of(gpsInterrompidaHaDias));
 
         spyService.recalcularPendentes();
@@ -393,8 +394,8 @@ class IndicadorServiceImplTest {
         IndicadorServiceImpl spyService = spy((IndicadorServiceImpl) service);
         doReturn(null).when(spyService).recalcular(anyString());
 
-        when(feedbackRepository.findByCriadoEmAfter(any())).thenReturn(List.of());
-        when(feedbackRepository.findByEditadoEmAfter(any())).thenReturn(List.of(feedback("h5", 1)));
+        when(feedbackConsulta.findByCriadoEmAfter(any())).thenReturn(List.of());
+        when(feedbackConsulta.findByEditadoEmAfter(any())).thenReturn(List.of(feedback("h5", 1)));
 
         spyService.recalcularPendentes();
 
@@ -406,9 +407,9 @@ class IndicadorServiceImplTest {
         IndicadorServiceImpl spyService = spy((IndicadorServiceImpl) service);
         doReturn(null).when(spyService).recalcular(anyString());
 
-        when(feedbackRepository.findByCriadoEmAfter(any()))
+        when(feedbackConsulta.findByCriadoEmAfter(any()))
                 .thenReturn(List.of(feedback("h1", 4)));
-        when(visitaRepository.findByStatusInAndProcessadoEmAfter(any(), any()))
+        when(visitaConsulta.findByStatusInAndProcessadoEmAfter(any(), any()))
                 .thenReturn(List.of(visitaFinalizadaDe("h1")));
 
         spyService.recalcularPendentes();
@@ -421,8 +422,8 @@ class IndicadorServiceImplTest {
         IndicadorServiceImpl spyService = spy((IndicadorServiceImpl) service);
         doReturn(null).when(spyService).recalcular(anyString());
 
-        when(feedbackRepository.findByCriadoEmAfter(any())).thenReturn(List.of());
-        when(visitaRepository.findByStatusInAndProcessadoEmAfter(any(), any())).thenReturn(List.of());
+        when(feedbackConsulta.findByCriadoEmAfter(any())).thenReturn(List.of());
+        when(visitaConsulta.findByStatusInAndProcessadoEmAfter(any(), any())).thenReturn(List.of());
 
         spyService.recalcularPendentes();
 
@@ -435,9 +436,9 @@ class IndicadorServiceImplTest {
         doThrow(new IllegalStateException("Mongo fora")).when(spyService).recalcular("h1");
         doReturn(null).when(spyService).recalcular("h2");
 
-        when(feedbackRepository.findByCriadoEmAfter(any()))
+        when(feedbackConsulta.findByCriadoEmAfter(any()))
                 .thenReturn(List.of(feedback("h1", 4), feedback("h2", 5)));
-        when(visitaRepository.findByStatusInAndProcessadoEmAfter(any(), any())).thenReturn(List.of());
+        when(visitaConsulta.findByStatusInAndProcessadoEmAfter(any(), any())).thenReturn(List.of());
 
         spyService.recalcularPendentes();
 

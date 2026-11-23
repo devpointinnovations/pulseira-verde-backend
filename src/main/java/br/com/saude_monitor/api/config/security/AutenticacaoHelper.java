@@ -1,6 +1,6 @@
 package br.com.saude_monitor.api.config.security;
 
-import br.com.saude_monitor.api.user.repository.UserRepository;
+import br.com.saude_monitor.api.user.service.UsuarioConsulta;
 import br.com.saude_monitor.api.user.util.EmailNormalizer;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
@@ -17,11 +17,11 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class AutenticacaoHelper {
 
-    private final UserRepository userRepository;
+    private final UsuarioConsulta usuarioConsulta;
 
     public Optional<String> usuarioIdAtual() {
         return usuarioEmailAtual()
-                .flatMap(email -> userRepository.findByEmail(EmailNormalizer.normalizar(email)))
+                .flatMap(email -> usuarioConsulta.findByEmail(EmailNormalizer.normalizar(email)))
                 .map(u -> u.getId());
     }
 
