@@ -1,10 +1,9 @@
 package br.com.saude_monitor.api.user.service.impl;
 
-import br.com.saude_monitor.api.feedback.document.FeedbackDocument;
 import br.com.saude_monitor.api.user.document.ConsentimentoItem;
 import br.com.saude_monitor.api.user.document.ConsentimentosDocument;
 import br.com.saude_monitor.api.user.service.ExportacaoPdfService;
-import br.com.saude_monitor.api.visita.document.VisitaDocument;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lowagie.text.Document;
 import com.lowagie.text.Element;
 import com.lowagie.text.Font;
@@ -15,6 +14,7 @@ import com.lowagie.text.Phrase;
 import com.lowagie.text.pdf.PdfPCell;
 import com.lowagie.text.pdf.PdfPTable;
 import com.lowagie.text.pdf.PdfWriter;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -38,6 +38,7 @@ import java.util.Map;
  */
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class ExportacaoPdfServiceImpl implements ExportacaoPdfService {
 
     private static final ZoneId FUSO_BRASILIA = ZoneId.of("America/Sao_Paulo");
@@ -48,6 +49,12 @@ public class ExportacaoPdfServiceImpl implements ExportacaoPdfService {
     private static final Color VERDE_TITULO = new Color(0x0B, 0x6B, 0x53);
 
     private static final String SEM_INFORMACAO = "—";
+
+    /**
+     * Lê visitas e feedbacks como mapa (campo → valor), na forma em que o JSON da exportação
+     * os mostra, em vez de importar os documentos dos outros módulos.
+     */
+    private final ObjectMapper objectMapper;
 
     @Override
     public byte[] gerar(Map<String, Object> dados) {
@@ -135,14 +142,15 @@ public class ExportacaoPdfServiceImpl implements ExportacaoPdfService {
         cabecalho(tabela, "Entrada", "Saída", "Duração", "Situação", "Origem");
 
         for (Object item : visitas) {
-            if (!(item instanceof VisitaDocument visita)) {
+            if (item == null) {
                 continue;
             }
-            celula(tabela, formatarInstante(visita.getEntrada()));
-            celula(tabela, formatarInstante(visita.getSaida()));
-            celula(tabela, formatarDuracao(visita.getDuracaoMinutos()));
-            celula(tabela, texto(visita.getStatus()));
-            celula(tabela, texto(visita.getOrigem()));
+            Map<String, Object> visita = comoMapa(item);
+            celula(tabela, formatarInstante(visita.get("entrada")));
+            celula(tabela, formatarInstante(visita.get("saida")));
+            celula(tabela, formatarDuracao(visita.get("duracaoMinutos")));
+            celula(tabela, texto(visita.get("status")));
+            celula(tabela, texto(visita.get("origem")));
         }
 
         documento.add(tabela);
@@ -160,13 +168,14 @@ public class ExportacaoPdfServiceImpl implements ExportacaoPdfService {
         cabecalho(tabela, "Data", "Nota", "Foi atendido", "Comentário");
 
         for (Object item : feedbacks) {
-            if (!(item instanceof FeedbackDocument feedback)) {
+            if (item == null) {
                 continue;
             }
-            celula(tabela, formatarInstante(feedback.getCriadoEm()));
-            celula(tabela, texto(feedback.getNota()));
-            celula(tabela, texto(feedback.getFoiAtendido()));
-            celula(tabela, texto(feedback.getComentario()));
+            Map<String, Object> feedback = comoMapa(item);
+            celula(tabela, formatarInstante(feedback.get("criadoEm")));
+            celula(tabela, texto(feedback.get("nota")));
+            celula(tabela, texto(feedback.get("foiAtendido")));
+            celula(tabela, texto(feedback.get("comentario")));
         }
 
         documento.add(tabela);
@@ -244,6 +253,11 @@ public class ExportacaoPdfServiceImpl implements ExportacaoPdfService {
     @SuppressWarnings("unchecked")
     private Map<String, Object> mapa(Object valor) {
         return valor instanceof Map<?, ?> m ? (Map<String, Object>) m : Map.of();
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> comoMapa(Object item) {
+        return objectMapper.convertValue(item, Map.class);
     }
 
     private List<?> lista(Object valor) {
