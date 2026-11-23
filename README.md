@@ -147,6 +147,8 @@ cd D:\pulseira-verde-backend
 .\gradlew.bat test
 ```
 
+`ArquiteturaModulosTest` (ArchUnit) impede ciclos entre módulos e acesso a `repository`/`document` de outro módulo. As violações já existentes ficam congeladas em `src/test/resources/archunit_store/` e só devem diminuir; violação nova deixa o teste vermelho.
+
 ---
 
 ## Parar o ambiente
