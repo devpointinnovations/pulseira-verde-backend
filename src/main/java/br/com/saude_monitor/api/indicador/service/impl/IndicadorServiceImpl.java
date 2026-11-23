@@ -6,13 +6,13 @@ import br.com.saude_monitor.api.indicador.repository.IndicadorHospitalRepository
 import br.com.saude_monitor.api.indicador.service.IndicadorService;
 import br.com.saude_monitor.api.indicador.service.EstatisticaService;
 import br.com.saude_monitor.api.feedback.document.FeedbackDocument;
-import br.com.saude_monitor.api.feedback.repository.FeedbackRepository;
+import br.com.saude_monitor.api.feedback.service.FeedbackConsulta;
 import br.com.saude_monitor.api.hospital.dto.IndicadoresResponse;
-import br.com.saude_monitor.api.hospital.repository.HospitalRepository;
+import br.com.saude_monitor.api.hospital.service.HospitalConsulta;
 import br.com.saude_monitor.api.visita.document.StatusVisita;
 import br.com.saude_monitor.api.visita.document.TipoPermanencia;
 import br.com.saude_monitor.api.visita.document.VisitaDocument;
-import br.com.saude_monitor.api.visita.repository.VisitaRepository;
+import br.com.saude_monitor.api.visita.service.VisitaConsulta;
 import br.com.saude_monitor.api.visita.service.PresencaVisita;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -77,9 +77,9 @@ public class IndicadorServiceImpl implements IndicadorService {
             StatusVisita.GPS_INTERROMPIDO);
 
     private final IndicadorHospitalRepository indicadorRepository;
-    private final FeedbackRepository feedbackRepository;
-    private final VisitaRepository visitaRepository;
-    private final HospitalRepository hospitalRepository;
+    private final FeedbackConsulta feedbackConsulta;
+    private final VisitaConsulta visitaConsulta;
+    private final HospitalConsulta hospitalConsulta;
     private final MongoTemplate mongoTemplate;
 
     @Override
@@ -88,7 +88,7 @@ public class IndicadorServiceImpl implements IndicadorService {
         Instant inicio = fim.minus(PERIODO_PADRAO);
 
         // SEG-01: só conta o feedback de visita com prova de presença.
-        List<FeedbackDocument> feedbacks = filtrarDeVisitasComprovadas(feedbackRepository
+        List<FeedbackDocument> feedbacks = filtrarDeVisitasComprovadas(feedbackConsulta
                 .findByHospitalIdAndCriadoEmAfterAndNotaNotNull(hospitalId, inicio));
 
         List<Integer> notas = feedbacks.stream()
@@ -101,7 +101,7 @@ public class IndicadorServiceImpl implements IndicadorService {
 
         // Visitas elegíveis para o indicador de tempo: FINALIZADA | GPS_INTERROMPIDO,
         // no período, com tipoPermanencia ATENDIMENTO (exclui internação/observação, RN-24).
-        List<VisitaDocument> candidatas = visitaRepository
+        List<VisitaDocument> candidatas = visitaConsulta
                 .findByHospitalIdAndStatusInAndSaidaBetweenAndTipoPermanencia(
                         hospitalId, STATUS_TEMPO, inicio, fim, TipoPermanencia.ATENDIMENTO);
 
@@ -151,7 +151,7 @@ public class IndicadorServiceImpl implements IndicadorService {
 
     @Override
     public IndicadoresDetalheResponse obterDetalhe(String hospitalId) {
-        if (!hospitalRepository.existsById(hospitalId)) {
+        if (!hospitalConsulta.existsById(hospitalId)) {
             return null;
         }
         return indicadorRepository.findByHospitalId(hospitalId)
@@ -173,14 +173,14 @@ public class IndicadorServiceImpl implements IndicadorService {
         Instant desde = Instant.now().minus(JANELA_RECALCULO);
 
         Set<String> candidatos = new HashSet<>();
-        feedbackRepository.findByCriadoEmAfter(desde)
+        feedbackConsulta.findByCriadoEmAfter(desde)
                 .forEach(f -> candidatos.add(f.getHospitalId()));
         // Edição pelo dono (até 15 dias após criar) muda a nota de feedback antigo.
-        feedbackRepository.findByEditadoEmAfter(desde)
+        feedbackConsulta.findByEditadoEmAfter(desde)
                 .forEach(f -> candidatos.add(f.getHospitalId()));
         // `processadoEm` (write time), não `saida` (business time, pode ser retroativo —
         // ver VisitaDocument.getProcessadoEm()). Achado do code-review de 09/09/2026.
-        visitaRepository.findByStatusInAndProcessadoEmAfter(STATUS_TEMPO, desde)
+        visitaConsulta.findByStatusInAndProcessadoEmAfter(STATUS_TEMPO, desde)
                 .forEach(v -> candidatos.add(v.getHospitalId()));
 
         for (String hospitalId : candidatos) {
@@ -230,7 +230,7 @@ public class IndicadorServiceImpl implements IndicadorService {
             return List.of();
         }
         Set<String> comprovadas = new HashSet<>();
-        visitaRepository.findAllById(visitaIds).forEach(v -> {
+        visitaConsulta.findAllById(visitaIds).forEach(v -> {
             if (PresencaVisita.isComprovada(v)) {
                 comprovadas.add(v.getId());
             }

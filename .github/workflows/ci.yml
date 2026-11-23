@@ -168,3 +168,33 @@ jobs:
 
       - name: Comparar
         run: python3 .github/scripts/contagem_testes.py comparar --atual atual --base base --alterados alterados.txt
+
+  monitoramento:
+    # E8-06: regras de alerta e painel de latência por rota (monitoramento/). Não dependem
+    # da nuvem nem do build do backend: o promtool confere a sintaxe e roda os testes de
+    # regras-latencia.test.yml (cada alerta dispara e deixa de disparar onde deve).
+    name: Regras e painel de monitoramento
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Só lê o repositório: o token do job não precisa de mais nada.
+    permissions:
+      contents: read
+    env:
+      # Mesma versão do Prometheus do perf/docker-compose.yml.
+      IMAGEM_PROMETHEUS: prom/prometheus:v3.0.1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Conferir as regras (promtool check rules)
+        run: >-
+          docker run --rm -v "$PWD/monitoramento/prometheus:/regras:ro" -w /regras
+          --entrypoint promtool "$IMAGEM_PROMETHEUS" check rules regras-latencia.yml
+
+      - name: Testar os alertas (promtool test rules)
+        run: >-
+          docker run --rm -v "$PWD/monitoramento/prometheus:/regras:ro" -w /regras
+          --entrypoint promtool "$IMAGEM_PROMETHEUS" test rules regras-latencia.test.yml
+
+      - name: Conferir o JSON do painel
+        run: python3 -m json.tool monitoramento/grafana/painel-operacao.json > /dev/null

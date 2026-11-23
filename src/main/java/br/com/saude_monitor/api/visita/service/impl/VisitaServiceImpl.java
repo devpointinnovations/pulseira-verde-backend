@@ -7,7 +7,7 @@ import br.com.saude_monitor.api.config.exception.RecursoNaoEncontradoException;
 import br.com.saude_monitor.api.config.exception.ValidacaoNegocioException;
 import br.com.saude_monitor.api.hospital.document.HospitalDocument;
 import br.com.saude_monitor.api.hospital.dto.PageResponse;
-import br.com.saude_monitor.api.hospital.repository.HospitalRepository;
+import br.com.saude_monitor.api.hospital.service.HospitalConsulta;
 import br.com.saude_monitor.api.visita.document.OrigemVisita;
 import br.com.saude_monitor.api.visita.document.PontoAmostralDocument;
 import br.com.saude_monitor.api.visita.document.StatusVisita;
@@ -25,11 +25,13 @@ import br.com.saude_monitor.api.visita.dto.TipoPermanenciaResponse;
 import br.com.saude_monitor.api.visita.dto.VisitaAtivaResponse;
 import br.com.saude_monitor.api.visita.dto.VisitaResponse;
 import br.com.saude_monitor.api.visita.repository.VisitaRepository;
+import br.com.saude_monitor.api.visita.seed.VisitaAtivaUnicaRunner;
 import br.com.saude_monitor.api.visita.service.ConflitoGeofenceException;
 import br.com.saude_monitor.api.visita.service.PresencaVisita;
 import br.com.saude_monitor.api.visita.service.VisitaDono;
 import br.com.saude_monitor.api.visita.service.VisitaService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.mongodb.core.FindAndModifyOptions;
@@ -100,10 +102,10 @@ public class VisitaServiceImpl implements VisitaService {
     private static final String CAMPO_ENCERRADA_SEM_SINAL = "encerradaSemSinal";
     private static final String CAMPO_ENCERRAMENTO_MANUAL = "encerramentoManual";
 
-    private static final List<StatusVisita> STATUS_ATIVOS = List.of(StatusVisita.EM_ATENDIMENTO, StatusVisita.SUSPEITA);
+    private static final List<StatusVisita> STATUS_ATIVOS = StatusVisita.ATIVOS;
 
     private final VisitaRepository visitaRepository;
-    private final HospitalRepository hospitalRepository;
+    private final HospitalConsulta hospitalConsulta;
     private final MongoTemplate mongoTemplate;
 
     @Override
@@ -118,20 +120,9 @@ public class VisitaServiceImpl implements VisitaService {
                 ? resolverHospitalPorGeofence(request.hospitalId(), request.posicao())
                 : exigirHospitalAtivo(request.hospitalId());
 
-        VisitaDocument existente = usuarioId != null
-            ? visitaRepository.findFirstByUsuarioIdAndStatusInOrderByEntradaDesc(
-                usuarioId, STATUS_ATIVOS).orElse(null)
-            : visitaRepository.findFirstByDispositivoIdAndStatusInOrderByEntradaDesc(
-                request.dispositivoId(), STATUS_ATIVOS).orElse(null);
-
-        // Idempotência (RN-03/§3.3): já existe visita ativa no mesmo hospital, retorna a existente (HTTP 200).
+        VisitaDocument existente = buscarVisitaAtiva(usuarioId, request.dispositivoId());
         if (existente != null) {
-            if (!existente.getHospitalId().equals(hospitalId)) {
-            throw new ConflitoException(
-                "Você já possui um check-in ativo em outro hospital. Finalize-o antes de iniciar uma nova visita.");
-            }
-            return new CheckinResponse(existente.getId(), existente.getHospitalId(),
-                    existente.getEntrada(), existente.getStatus(), false);
+            return responderVisitaJaAtiva(existente, hospitalId);
         }
 
         Instant agora = Instant.now();
@@ -159,8 +150,46 @@ public class VisitaServiceImpl implements VisitaService {
             builder.ultimaPosicaoEm(entrada);
         }
 
-        VisitaDocument salva = visitaRepository.save(builder.build());
+        VisitaDocument salva;
+        try {
+            salva = visitaRepository.save(builder.build());
+        } catch (DuplicateKeyException corrida) {
+            if (!isViolacaoDeVisitaAtivaUnica(corrida)) {
+                throw corrida;
+            }
+            // Outro check-in da mesma pessoa (geofence, fila offline, toque manual) gravou
+            // primeiro: o índice único parcial de visita ativa barrou este (R2 da auditoria
+            // de 23/11/2026). Responde como a idempotência acima, com a visita que venceu.
+            VisitaDocument vencedora = buscarVisitaAtiva(usuarioId, request.dispositivoId());
+            if (vencedora == null) {
+                throw new ConflitoException("Check-in simultâneo em andamento. Tente novamente.");
+            }
+            return responderVisitaJaAtiva(vencedora, hospitalId);
+        }
         return new CheckinResponse(salva.getId(), salva.getHospitalId(), salva.getEntrada(), salva.getStatus(), true);
+    }
+
+    private static boolean isViolacaoDeVisitaAtivaUnica(DuplicateKeyException e) {
+        String mensagem = String.valueOf(e.getMessage());
+        return mensagem.contains(VisitaAtivaUnicaRunner.INDICE_USUARIO)
+                || mensagem.contains(VisitaAtivaUnicaRunner.INDICE_DISPOSITIVO);
+    }
+
+    private VisitaDocument buscarVisitaAtiva(String usuarioId, String dispositivoId) {
+        return (usuarioId != null
+                ? visitaRepository.findFirstByUsuarioIdAndStatusInOrderByEntradaDesc(usuarioId, STATUS_ATIVOS)
+                : visitaRepository.findFirstByDispositivoIdAndStatusInOrderByEntradaDesc(dispositivoId, STATUS_ATIVOS))
+                .orElse(null);
+    }
+
+    /** Idempotência (RN-03/§3.3): visita ativa no mesmo hospital volta como está (HTTP 200); em outro, 409. */
+    private static CheckinResponse responderVisitaJaAtiva(VisitaDocument existente, String hospitalId) {
+        if (!existente.getHospitalId().equals(hospitalId)) {
+            throw new ConflitoException(
+                    "Você já possui um check-in ativo em outro hospital. Finalize-o antes de iniciar uma nova visita.");
+        }
+        return new CheckinResponse(existente.getId(), existente.getHospitalId(),
+                existente.getEntrada(), existente.getStatus(), false);
     }
 
     @Override
@@ -489,7 +518,7 @@ public class VisitaServiceImpl implements VisitaService {
     }
 
     private String exigirHospitalAtivo(String hospitalId) {
-        HospitalDocument hospital = hospitalRepository.findById(hospitalId)
+        HospitalDocument hospital = hospitalConsulta.findById(hospitalId)
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Hospital não encontrado para o id informado."));
         if (!hospital.isAtivo()) {
             throw new ValidacaoNegocioException("Hospital inativo não pode receber check-in.");
@@ -646,7 +675,7 @@ public class VisitaServiceImpl implements VisitaService {
         if (distintos.isEmpty()) {
             return Map.of();
         }
-        return hospitalRepository.findAllById(distintos).stream()
+        return hospitalConsulta.findAllById(distintos).stream()
                 .collect(Collectors.toMap(HospitalDocument::getId, HospitalDocument::getNome, (a, b) -> a));
     }
 

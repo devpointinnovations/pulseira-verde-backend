@@ -10,7 +10,11 @@ import br.com.saude_monitor.api.feedback.document.FeedbackDocument;
 import br.com.saude_monitor.api.user.document.ConsentimentoItem;
 import br.com.saude_monitor.api.user.document.ConsentimentosDocument;
 import br.com.saude_monitor.api.user.document.Papel;
+import br.com.saude_monitor.api.feedback.repository.FeedbackRepository;
+import br.com.saude_monitor.api.feedback.service.FeedbackConsulta;
 import br.com.saude_monitor.api.user.document.UserDocument;
+import br.com.saude_monitor.api.visita.repository.VisitaRepository;
+import br.com.saude_monitor.api.visita.service.VisitaConsulta;
 import br.com.saude_monitor.api.user.dto.AtualizarConsentimentosRequest;
 import br.com.saude_monitor.api.user.dto.ConsentimentoRequest;
 import br.com.saude_monitor.api.user.dto.ConsentimentosResponse;
@@ -22,6 +26,7 @@ import org.bson.Document;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.UpdateDefinition;
@@ -41,6 +46,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -71,7 +77,8 @@ class UserServiceImplTest {
         userService = new UserServiceImpl(
                 userRepository,
                 new BCryptPasswordEncoder(),
-                mongoTemplate,
+                new VisitaConsulta(mock(VisitaRepository.class), mongoTemplate),
+                new FeedbackConsulta(mock(FeedbackRepository.class), mongoTemplate),
                 indicadorService,
                 authService,
                 usuarioAutenticadoCache);
@@ -119,6 +126,21 @@ class UserServiceImplTest {
         verify(userRepository).delete(user);
         // O token ainda válido da conta deixa de autenticar nesta instância (ARQ-03).
         verify(usuarioAutenticadoCache).removerDoCache("marina@email.com");
+    }
+
+    @Test
+    void deveAnonimizarVisitasEFeedbacksAntesDeApagarOUsuario() {
+        UserDocument user = usuario("u1");
+        when(userRepository.findById("u1")).thenReturn(Optional.of(user));
+        when(mongoTemplate.find(any(Query.class), any())).thenReturn(List.of());
+
+        userService.excluirConta("u1");
+
+        // LGPD: o vínculo some das visitas e dos feedbacks antes de o cadastro ser apagado.
+        InOrder ordem = inOrder(mongoTemplate, userRepository);
+        ordem.verify(mongoTemplate).updateMulti(any(Query.class), any(), eq(VisitaDocument.class));
+        ordem.verify(mongoTemplate).updateMulti(any(Query.class), any(), eq(FeedbackDocument.class));
+        ordem.verify(userRepository).delete(user);
     }
 
     @Test

@@ -5,7 +5,7 @@ import br.com.saude_monitor.api.config.exception.NaoAutorizadoException;
 import br.com.saude_monitor.api.config.exception.ConflitoException;
 import br.com.saude_monitor.api.config.exception.ValidacaoNegocioException;
 import br.com.saude_monitor.api.hospital.document.HospitalDocument;
-import br.com.saude_monitor.api.hospital.repository.HospitalRepository;
+import br.com.saude_monitor.api.hospital.service.HospitalConsulta;
 import br.com.saude_monitor.api.visita.document.OrigemVisita;
 import br.com.saude_monitor.api.visita.document.PontoAmostralDocument;
 import br.com.saude_monitor.api.visita.document.StatusVisita;
@@ -26,6 +26,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.bson.Document;
 import org.mockito.ArgumentCaptor;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.mongodb.core.FindAndModifyOptions;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
@@ -60,15 +61,15 @@ class VisitaServiceImplTest {
 
     private VisitaServiceImpl visitaService;
     private VisitaRepository visitaRepository;
-    private HospitalRepository hospitalRepository;
+    private HospitalConsulta hospitalConsulta;
     private MongoTemplate mongoTemplate;
 
     @BeforeEach
     void setup() {
         visitaRepository = mock(VisitaRepository.class);
-        hospitalRepository = mock(HospitalRepository.class);
+        hospitalConsulta = mock(HospitalConsulta.class);
         mongoTemplate = mock(MongoTemplate.class);
-        visitaService = new VisitaServiceImpl(visitaRepository, hospitalRepository, mongoTemplate);
+        visitaService = new VisitaServiceImpl(visitaRepository, hospitalConsulta, mongoTemplate);
         // Update atômico (ARQ-04): aplica o `Update` ao documento que o `findById` do teste
         // devolve, como o Mongo faria, e devolve o documento atualizado (returnNew).
         when(mongoTemplate.findAndModify(any(Query.class), any(Update.class),
@@ -171,7 +172,7 @@ class VisitaServiceImplTest {
 
     @Test
     void checkinAnonimoComDispositivoIdCriaVisita() {
-        when(hospitalRepository.findById("h1")).thenReturn(Optional.of(hospitalAtivo("h1")));
+        when(hospitalConsulta.findById("h1")).thenReturn(Optional.of(hospitalAtivo("h1")));
         when(visitaRepository.findFirstByDispositivoIdAndStatusInOrderByEntradaDesc(
             anyString(), any())).thenReturn(Optional.empty());
         when(visitaRepository.save(any(VisitaDocument.class))).thenAnswer(inv -> {
@@ -190,7 +191,7 @@ class VisitaServiceImplTest {
 
     @Test
     void checkinAnonimoEmOutroHospitalComVisitaAtivaLancaConflito() {
-        when(hospitalRepository.findById("h2")).thenReturn(Optional.of(hospitalAtivo("h2")));
+        when(hospitalConsulta.findById("h2")).thenReturn(Optional.of(hospitalAtivo("h2")));
         when(visitaRepository.findFirstByDispositivoIdAndStatusInOrderByEntradaDesc(
                 "anon-abc", List.of(StatusVisita.EM_ATENDIMENTO, StatusVisita.SUSPEITA)))
                 .thenReturn(Optional.of(visitaAtivaAnonima("anon-abc")));
@@ -199,6 +200,65 @@ class VisitaServiceImplTest {
 
         assertThrows(ConflitoException.class, () -> visitaService.checkin(request, null));
         verify(visitaRepository, never()).save(any(VisitaDocument.class));
+    }
+
+    @Test
+    void checkinQuePerdeACorridaDevolveAVisitaQueVenceu() {
+        when(hospitalConsulta.findById("h1")).thenReturn(Optional.of(hospitalAtivo("h1")));
+        VisitaDocument vencedora = visitaAtivaAnonima("anon-abc");
+        vencedora.setId("v1");
+        when(visitaRepository.findFirstByDispositivoIdAndStatusInOrderByEntradaDesc("anon-abc", StatusVisita.ATIVOS))
+                .thenReturn(Optional.empty(), Optional.of(vencedora));
+        when(visitaRepository.save(any(VisitaDocument.class))).thenThrow(duplicataDaVisitaAtiva());
+
+        CheckinResponse resposta = visitaService.checkin(
+                new CheckinRequest("h1", OrigemVisita.MANUAL, null, "anon-abc", null), null);
+
+        assertFalse(resposta.criado());
+        assertEquals("v1", resposta.id());
+    }
+
+    @Test
+    void checkinComOutraViolacaoDeChaveUnicaNaoViraIdempotencia() {
+        when(hospitalConsulta.findById("h1")).thenReturn(Optional.of(hospitalAtivo("h1")));
+        when(visitaRepository.findFirstByUsuarioIdAndStatusInOrderByEntradaDesc("u1", StatusVisita.ATIVOS))
+                .thenReturn(Optional.empty());
+        when(visitaRepository.save(any(VisitaDocument.class)))
+                .thenThrow(new DuplicateKeyException("E11000 index: outro_indice dup key"));
+
+        CheckinRequest request = new CheckinRequest("h1", OrigemVisita.MANUAL, null, null, null);
+
+        assertThrows(DuplicateKeyException.class, () -> visitaService.checkin(request, "u1"));
+    }
+
+    private static DuplicateKeyException duplicataDaVisitaAtiva() {
+        return new DuplicateKeyException("E11000 index: uk_visita_ativa_usuario dup key");
+    }
+
+    @Test
+    void checkinQuePerdeACorridaParaOutroHospitalLancaConflito() {
+        when(hospitalConsulta.findById("h2")).thenReturn(Optional.of(hospitalAtivo("h2")));
+        VisitaDocument vencedora = visitaAtivaAnonima("anon-abc");
+        vencedora.setUsuarioId("u1");
+        when(visitaRepository.findFirstByUsuarioIdAndStatusInOrderByEntradaDesc("u1", StatusVisita.ATIVOS))
+                .thenReturn(Optional.empty(), Optional.of(vencedora));
+        when(visitaRepository.save(any(VisitaDocument.class))).thenThrow(duplicataDaVisitaAtiva());
+
+        CheckinRequest request = new CheckinRequest("h2", OrigemVisita.MANUAL, null, null, null);
+
+        assertThrows(ConflitoException.class, () -> visitaService.checkin(request, "u1"));
+    }
+
+    @Test
+    void checkinQuePerdeACorridaSemVencedoraVisivelLancaConflito() {
+        when(hospitalConsulta.findById("h1")).thenReturn(Optional.of(hospitalAtivo("h1")));
+        when(visitaRepository.findFirstByUsuarioIdAndStatusInOrderByEntradaDesc("u1", StatusVisita.ATIVOS))
+                .thenReturn(Optional.empty());
+        when(visitaRepository.save(any(VisitaDocument.class))).thenThrow(duplicataDaVisitaAtiva());
+
+        CheckinRequest request = new CheckinRequest("h1", OrigemVisita.MANUAL, null, null, null);
+
+        assertThrows(ConflitoException.class, () -> visitaService.checkin(request, "u1"));
     }
 
     /**
@@ -216,7 +276,7 @@ class VisitaServiceImplTest {
 
     @Test
     void checkinComOcorridoEmRegistraAHoraRealDaEntrada() {
-        when(hospitalRepository.findById("h1")).thenReturn(Optional.of(hospitalAtivo("h1")));
+        when(hospitalConsulta.findById("h1")).thenReturn(Optional.of(hospitalAtivo("h1")));
         when(visitaRepository.findFirstByDispositivoIdAndStatusInOrderByEntradaDesc(
                 anyString(), any())).thenReturn(Optional.empty());
         aoSalvarDevolverComId();
@@ -232,7 +292,7 @@ class VisitaServiceImplTest {
 
     @Test
     void checkinIgnoraOcorridoEmNoFuturo() {
-        when(hospitalRepository.findById("h1")).thenReturn(Optional.of(hospitalAtivo("h1")));
+        when(hospitalConsulta.findById("h1")).thenReturn(Optional.of(hospitalAtivo("h1")));
         when(visitaRepository.findFirstByDispositivoIdAndStatusInOrderByEntradaDesc(
                 anyString(), any())).thenReturn(Optional.empty());
         aoSalvarDevolverComId();
@@ -248,7 +308,7 @@ class VisitaServiceImplTest {
 
     @Test
     void checkinIgnoraOcorridoEmAlemDaJanelaDe24h() {
-        when(hospitalRepository.findById("h1")).thenReturn(Optional.of(hospitalAtivo("h1")));
+        when(hospitalConsulta.findById("h1")).thenReturn(Optional.of(hospitalAtivo("h1")));
         when(visitaRepository.findFirstByDispositivoIdAndStatusInOrderByEntradaDesc(
                 anyString(), any())).thenReturn(Optional.empty());
         aoSalvarDevolverComId();
@@ -447,7 +507,7 @@ class VisitaServiceImplTest {
 
         when(visitaRepository.findByUsuarioIdOrderByEntradaDesc("u1", PageRequest.of(0, 20)))
                 .thenReturn(new PageImpl<>(List.of(visita)));
-        when(hospitalRepository.findAllById(List.of("h1")))
+        when(hospitalConsulta.findAllById(List.of("h1")))
                 .thenReturn(List.of(HospitalDocument.builder().id("h1").nome("Hospital Central").build()));
 
         PageResponse<VisitaResponse> resultado = visitaService.historico("u1", 0, 20);
