@@ -1,5 +1,7 @@
 package br.com.saude_monitor.api.visita.document;
 
+import java.util.List;
+
 /**
  * Status do ciclo de vida de uma visita (Épico 02 — Detecção de Visitas).
  *
@@ -16,5 +18,8 @@ public enum StatusVisita {
     GPS_INTERROMPIDO,
 
     /** Visita encerrada cuja janela de resposta de feedback (24h) expirou sem resposta (RN-09). */
-    SEM_FEEDBACK
+    SEM_FEEDBACK;
+
+    /** Status de visita em curso: uma pessoa só pode ter uma (índice único parcial em {@code visitas}). */
+    public static final List<StatusVisita> ATIVOS = List.of(EM_ATENDIMENTO, SUSPEITA);
 }
