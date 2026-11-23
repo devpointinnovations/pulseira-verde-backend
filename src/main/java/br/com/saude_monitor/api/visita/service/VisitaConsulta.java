@@ -3,6 +3,7 @@ package br.com.saude_monitor.api.visita.service;
 import br.com.saude_monitor.api.visita.document.StatusVisita;
 import br.com.saude_monitor.api.visita.document.TipoPermanencia;
 import br.com.saude_monitor.api.visita.document.VisitaDocument;
+import br.com.saude_monitor.api.visita.dto.VisitaParaIndicador;
 import br.com.saude_monitor.api.visita.repository.VisitaRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.mongodb.core.MongoTemplate;
@@ -31,20 +32,13 @@ public class VisitaConsulta {
     private static final List<StatusVisita> STATUS_TEMPO = List.of(StatusVisita.FINALIZADA, StatusVisita.GPS_INTERROMPIDO);
 
     /**
-     * O que o indicador de tempo precisa de uma visita. {@code comprovada} é a prova de
-     * presença (SEG-01); {@code finalizada} e {@code gpsInterrompido} dizem o status.
-     */
-    public record ParaIndicador(Integer duracaoMinutos, boolean comprovada, boolean finalizada,
-                                boolean gpsInterrompido, Instant entrada, Instant saida, Instant ultimaPosicaoEm) { }
-
-    /**
      * Visitas do hospital elegíveis ao indicador de tempo: FINALIZADA ou GPS_INTERROMPIDO, com
      * saída no período e tipo de permanência ATENDIMENTO (exclui internação/observação, RN-24).
      */
-    public List<ParaIndicador> paraIndicadorDeTempo(String hospitalId, Instant inicio, Instant fim) {
+    public List<VisitaParaIndicador> paraIndicadorDeTempo(String hospitalId, Instant inicio, Instant fim) {
         return visitaRepository.findByHospitalIdAndStatusInAndSaidaBetweenAndTipoPermanencia(
                         hospitalId, STATUS_TEMPO, inicio, fim, TipoPermanencia.ATENDIMENTO).stream()
-                .map(v -> new ParaIndicador(v.getDuracaoMinutos(), PresencaVisita.isComprovada(v),
+                .map(v -> new VisitaParaIndicador(v.getDuracaoMinutos(), PresencaVisita.isComprovada(v),
                         v.getStatus() == StatusVisita.FINALIZADA, v.getStatus() == StatusVisita.GPS_INTERROMPIDO,
                         v.getEntrada(), v.getSaida(), v.getUltimaPosicaoEm()))
                 .toList();

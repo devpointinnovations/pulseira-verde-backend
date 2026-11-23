@@ -1,5 +1,6 @@
 package br.com.saude_monitor.api.indicador.service.impl;
 
+import br.com.saude_monitor.api.feedback.dto.FeedbackParaIndicador;
 import br.com.saude_monitor.api.indicador.document.IndicadorHospitalDocument;
 import br.com.saude_monitor.api.indicador.dto.IndicadoresDetalheResponse;
 import br.com.saude_monitor.api.indicador.repository.IndicadorHospitalRepository;
@@ -8,6 +9,7 @@ import br.com.saude_monitor.api.indicador.service.EstatisticaService;
 import br.com.saude_monitor.api.feedback.service.FeedbackConsulta;
 import br.com.saude_monitor.api.hospital.dto.IndicadoresResponse;
 import br.com.saude_monitor.api.hospital.service.HospitalConsulta;
+import br.com.saude_monitor.api.visita.dto.VisitaParaIndicador;
 import br.com.saude_monitor.api.visita.service.VisitaConsulta;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -78,11 +80,11 @@ public class IndicadorServiceImpl implements IndicadorService {
         Instant inicio = fim.minus(PERIODO_PADRAO);
 
         // SEG-01: só conta o feedback de visita com prova de presença.
-        List<FeedbackConsulta.ParaIndicador> feedbacks = filtrarDeVisitasComprovadas(
+        List<FeedbackParaIndicador> feedbacks = filtrarDeVisitasComprovadas(
                 feedbackConsulta.comNotaDesde(hospitalId, inicio));
 
         List<Integer> notas = feedbacks.stream()
-                .map(FeedbackConsulta.ParaIndicador::nota)
+                .map(FeedbackParaIndicador::nota)
                 .toList();
         Double notaMedia = EstatisticaService.notaMedia(notas);
         int nAvaliacoes = (int) feedbacks.stream()
@@ -91,15 +93,15 @@ public class IndicadorServiceImpl implements IndicadorService {
 
         // Visitas elegíveis para o indicador de tempo (FINALIZADA | GPS_INTERROMPIDO, no período,
         // permanência ATENDIMENTO, RN-24): a visita decide, o indicador aplica as regras de duração.
-        List<VisitaConsulta.ParaIndicador> candidatas = visitaConsulta.paraIndicadorDeTempo(hospitalId, inicio, fim);
+        List<VisitaParaIndicador> candidatas = visitaConsulta.paraIndicadorDeTempo(hospitalId, inicio, fim);
 
         List<Integer> duracoes = candidatas.stream()
-                .filter(VisitaConsulta.ParaIndicador::comprovada)
+                .filter(VisitaParaIndicador::comprovada)
                 .filter(v -> v.duracaoMinutos() != null)
                 .filter(v -> v.duracaoMinutos() >= DURACAO_MINIMA_MINUTOS)
                 .filter(v -> v.duracaoMinutos() <= TETO_DURACAO_MINUTOS)
                 .filter(IndicadorServiceImpl::tempoConfiavel)
-                .map(VisitaConsulta.ParaIndicador::duracaoMinutos)
+                .map(VisitaParaIndicador::duracaoMinutos)
                 .toList();
 
         Integer tempoMediano = EstatisticaService.tempoMedianoMinutos(duracoes);
@@ -183,7 +185,7 @@ public class IndicadorServiceImpl implements IndicadorService {
      * Visitas FINALIZADA sempre entram (RN-03). Para {@code GPS_INTERROMPIDO} (RN-06),
      * a duração parcial só é confiável se a cobertura de GPS ≥ 90% do período (RN-17).
      */
-    private static boolean tempoConfiavel(VisitaConsulta.ParaIndicador visita) {
+    private static boolean tempoConfiavel(VisitaParaIndicador visita) {
         if (visita.finalizada()) {
             return true;
         }
@@ -203,10 +205,10 @@ public class IndicadorServiceImpl implements IndicadorService {
      * Mantém só os feedbacks cuja visita tem prova de presença (SEG-01), lendo as visitas em
      * lote. Feedback sem visita encontrada fica de fora.
      */
-    private List<FeedbackConsulta.ParaIndicador> filtrarDeVisitasComprovadas(
-            List<FeedbackConsulta.ParaIndicador> feedbacks) {
+    private List<FeedbackParaIndicador> filtrarDeVisitasComprovadas(
+            List<FeedbackParaIndicador> feedbacks) {
         List<String> visitaIds = feedbacks.stream()
-                .map(FeedbackConsulta.ParaIndicador::visitaId)
+                .map(FeedbackParaIndicador::visitaId)
                 .filter(Objects::nonNull)
                 .distinct()
                 .toList();

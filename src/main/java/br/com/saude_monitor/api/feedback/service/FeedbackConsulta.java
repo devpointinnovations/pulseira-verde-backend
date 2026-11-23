@@ -1,6 +1,7 @@
 package br.com.saude_monitor.api.feedback.service;
 
 import br.com.saude_monitor.api.feedback.document.FeedbackDocument;
+import br.com.saude_monitor.api.feedback.dto.FeedbackParaIndicador;
 import br.com.saude_monitor.api.feedback.repository.FeedbackRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.mongodb.core.MongoTemplate;
@@ -23,13 +24,10 @@ public class FeedbackConsulta {
     private final FeedbackRepository feedbackRepository;
     private final MongoTemplate mongoTemplate;
 
-    /** O que o indicador precisa de um feedback: a visita (para a prova de presença) e a nota. */
-    public record ParaIndicador(String visitaId, Integer nota) { }
-
     /** Feedbacks do hospital criados desde o instante e com nota. */
-    public List<ParaIndicador> comNotaDesde(String hospitalId, Instant desde) {
+    public List<FeedbackParaIndicador> comNotaDesde(String hospitalId, Instant desde) {
         return feedbackRepository.findByHospitalIdAndCriadoEmAfterAndNotaNotNull(hospitalId, desde).stream()
-                .map(f -> new ParaIndicador(f.getVisitaId(), f.getNota()))
+                .map(f -> new FeedbackParaIndicador(f.getVisitaId(), f.getNota()))
                 .toList();
     }
 

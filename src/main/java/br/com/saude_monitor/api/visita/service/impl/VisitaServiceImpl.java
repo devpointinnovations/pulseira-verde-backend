@@ -5,6 +5,8 @@ import br.com.saude_monitor.api.config.exception.ConflitoException;
 import br.com.saude_monitor.api.config.exception.NaoAutorizadoException;
 import br.com.saude_monitor.api.config.exception.RecursoNaoEncontradoException;
 import br.com.saude_monitor.api.config.exception.ValidacaoNegocioException;
+import br.com.saude_monitor.api.hospital.dto.HospitalNoPonto;
+import br.com.saude_monitor.api.hospital.dto.HospitalParaVisita;
 import br.com.saude_monitor.api.hospital.dto.PageResponse;
 import br.com.saude_monitor.api.hospital.service.HospitalConsulta;
 import br.com.saude_monitor.api.visita.document.OrigemVisita;
@@ -464,7 +466,7 @@ public class VisitaServiceImpl implements VisitaService {
         }
         GeoJsonPoint ponto = new GeoJsonPoint(posicao.coordinates().getFirst(), posicao.coordinates().get(1));
 
-        List<HospitalConsulta.NoPonto> candidatos = hospitalConsulta.ativosComGeofenceContendo(ponto);
+        List<HospitalNoPonto> candidatos = hospitalConsulta.ativosComGeofenceContendo(ponto);
 
         if (candidatos.isEmpty()) {
             throw new ValidacaoNegocioException("A posição informada não está dentro do geofence de nenhum hospital.");
@@ -474,12 +476,12 @@ public class VisitaServiceImpl implements VisitaService {
         }
 
         // Sobreposição de geofences (E2-04/RN-05): ordena por distância ao centroide.
-        List<HospitalConsulta.NoPonto> ordenados = candidatos.stream()
+        List<HospitalNoPonto> ordenados = candidatos.stream()
                 .sorted(Comparator.comparingDouble(h -> distanciaMetros(ponto, h.localizacao())))
                 .toList();
 
-        HospitalConsulta.NoPonto maisProximo = ordenados.getFirst();
-        HospitalConsulta.NoPonto segundo = ordenados.get(1);
+        HospitalNoPonto maisProximo = ordenados.getFirst();
+        HospitalNoPonto segundo = ordenados.get(1);
         double d1 = distanciaMetros(ponto, maisProximo.localizacao());
         double d2 = distanciaMetros(ponto, segundo.localizacao());
 
@@ -514,7 +516,7 @@ public class VisitaServiceImpl implements VisitaService {
     }
 
     private String exigirHospitalAtivo(String hospitalId) {
-        HospitalConsulta.Resumo hospital = hospitalConsulta.resumo(hospitalId)
+        HospitalParaVisita hospital = hospitalConsulta.resumo(hospitalId)
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Hospital não encontrado para o id informado."));
         if (!hospital.ativo()) {
             throw new ValidacaoNegocioException("Hospital inativo não pode receber check-in.");
@@ -672,7 +674,7 @@ public class VisitaServiceImpl implements VisitaService {
             return Map.of();
         }
         return hospitalConsulta.resumos(distintos).stream()
-                .collect(Collectors.toMap(HospitalConsulta.Resumo::id, HospitalConsulta.Resumo::nome, (a, b) -> a));
+                .collect(Collectors.toMap(HospitalParaVisita::id, HospitalParaVisita::nome, (a, b) -> a));
     }
 
     private VisitaResponse toResponse(VisitaDocument v) {

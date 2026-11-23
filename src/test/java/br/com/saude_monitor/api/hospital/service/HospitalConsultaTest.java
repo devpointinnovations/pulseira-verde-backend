@@ -1,6 +1,8 @@
 package br.com.saude_monitor.api.hospital.service;
 
 import br.com.saude_monitor.api.hospital.document.HospitalDocument;
+import br.com.saude_monitor.api.hospital.dto.HospitalNoPonto;
+import br.com.saude_monitor.api.hospital.dto.HospitalParaVisita;
 import br.com.saude_monitor.api.hospital.repository.HospitalRepository;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -55,7 +57,7 @@ class HospitalConsultaTest {
         when(repository.findById("h1")).thenReturn(
                 Optional.of(HospitalDocument.builder().id("h1").nome("Hospital Um").ativo(true).build()));
 
-        assertEquals(Optional.of(new HospitalConsulta.Resumo("h1", "Hospital Um", true)), consulta.resumo("h1"));
+        assertEquals(Optional.of(new HospitalParaVisita("h1", "Hospital Um", true)), consulta.resumo("h1"));
         assertEquals(Optional.empty(), consulta.resumo("inexistente"));
     }
 
@@ -66,7 +68,7 @@ class HospitalConsultaTest {
                 HospitalDocument.builder().id("h2").nome("Dois").ativo(false).build()));
 
         assertEquals(
-                List.of(new HospitalConsulta.Resumo("h1", "Um", true), new HospitalConsulta.Resumo("h2", "Dois", false)),
+                List.of(new HospitalParaVisita("h1", "Um", true), new HospitalParaVisita("h2", "Dois", false)),
                 consulta.resumos(List.of("h1", "h2")));
     }
 
@@ -77,9 +79,9 @@ class HospitalConsultaTest {
                 List.of(HospitalDocument.builder().id("h1").nome("Um").localizacao(centro).build()));
         ArgumentCaptor<Query> query = ArgumentCaptor.forClass(Query.class);
 
-        List<HospitalConsulta.NoPonto> resultado = consulta.ativosComGeofenceContendo(ponto);
+        List<HospitalNoPonto> resultado = consulta.ativosComGeofenceContendo(ponto);
 
-        assertEquals(List.of(new HospitalConsulta.NoPonto("h1", "Um", centro)), resultado);
+        assertEquals(List.of(new HospitalNoPonto("h1", "Um", centro)), resultado);
         verify(mongoTemplate).find(query.capture(), eq(HospitalDocument.class));
         assertEquals(true, query.getValue().getQueryObject().get("ativo"));
         assertTrue(query.getValue().getQueryObject().containsKey("geofence"));

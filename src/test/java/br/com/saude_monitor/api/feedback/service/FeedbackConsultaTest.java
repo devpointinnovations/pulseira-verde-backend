@@ -1,6 +1,7 @@
 package br.com.saude_monitor.api.feedback.service;
 
 import br.com.saude_monitor.api.feedback.document.FeedbackDocument;
+import br.com.saude_monitor.api.feedback.dto.FeedbackParaIndicador;
 import br.com.saude_monitor.api.feedback.repository.FeedbackRepository;
 import org.bson.Document;
 import org.junit.jupiter.api.Test;
@@ -72,7 +73,7 @@ class FeedbackConsultaTest {
         when(repository.findByHospitalIdAndCriadoEmAfterAndNotaNotNull("h1", DESDE)).thenReturn(List.of(
                 FeedbackDocument.builder().visitaId("v1").hospitalId("h1").nota(4).comentario("ótimo").build()));
 
-        assertEquals(List.of(new FeedbackConsulta.ParaIndicador("v1", 4)), consulta.comNotaDesde("h1", DESDE));
+        assertEquals(List.of(new FeedbackParaIndicador("v1", 4)), consulta.comNotaDesde("h1", DESDE));
     }
 
     @Test

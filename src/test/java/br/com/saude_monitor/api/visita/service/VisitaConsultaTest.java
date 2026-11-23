@@ -3,6 +3,7 @@ package br.com.saude_monitor.api.visita.service;
 import br.com.saude_monitor.api.visita.document.StatusVisita;
 import br.com.saude_monitor.api.visita.document.TipoPermanencia;
 import br.com.saude_monitor.api.visita.document.VisitaDocument;
+import br.com.saude_monitor.api.visita.dto.VisitaParaIndicador;
 import br.com.saude_monitor.api.visita.repository.VisitaRepository;
 import org.bson.Document;
 import org.junit.jupiter.api.Test;
@@ -104,8 +105,8 @@ class VisitaConsultaTest {
                 .thenReturn(List.of(comprovada, semProva));
 
         assertEquals(
-                List.of(new VisitaConsulta.ParaIndicador(30, true, true, false, T0, T1, null),
-                        new VisitaConsulta.ParaIndicador(10, false, false, true, T0, T1, T1)),
+                List.of(new VisitaParaIndicador(30, true, true, false, T0, T1, null),
+                        new VisitaParaIndicador(10, false, false, true, T0, T1, T1)),
                 consulta.paraIndicadorDeTempo("h1", T0, T1));
     }
 
