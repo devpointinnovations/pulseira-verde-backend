@@ -1,12 +1,13 @@
 package br.com.saude_monitor.api.user.service.impl;
 
 import br.com.saude_monitor.api.config.security.UsuarioAutenticadoCache;
+import br.com.saude_monitor.api.feedback.service.FeedbackConsulta;
 import br.com.saude_monitor.api.indicador.service.IndicadorService;
 import br.com.saude_monitor.api.auth.service.AuthService;
+import br.com.saude_monitor.api.visita.service.VisitaConsulta;
 import br.com.saude_monitor.api.config.exception.ConflitoException;
 import br.com.saude_monitor.api.config.exception.RecursoNaoEncontradoException;
 import br.com.saude_monitor.api.config.exception.ValidacaoNegocioException;
-import br.com.saude_monitor.api.feedback.document.FeedbackDocument;
 import br.com.saude_monitor.api.user.document.ConsentimentoItem;
 import br.com.saude_monitor.api.user.document.ConsentimentosDocument;
 import br.com.saude_monitor.api.user.document.Papel;
@@ -19,13 +20,8 @@ import br.com.saude_monitor.api.user.dto.UserResponse;
 import br.com.saude_monitor.api.user.repository.UserRepository;
 import br.com.saude_monitor.api.user.service.UserService;
 import br.com.saude_monitor.api.user.util.EmailNormalizer;
-import br.com.saude_monitor.api.visita.document.VisitaDocument;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.mongodb.core.MongoTemplate;
-import org.springframework.data.mongodb.core.query.Criteria;
-import org.springframework.data.mongodb.core.query.Query;
-import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -60,7 +56,8 @@ public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
-    private final MongoTemplate mongoTemplate;
+    private final VisitaConsulta visitaConsulta;
+    private final FeedbackConsulta feedbackConsulta;
     private final IndicadorService indicadorService;
     private final AuthService authService;
     private final UsuarioAutenticadoCache usuarioAutenticadoCache;
@@ -167,10 +164,6 @@ public class UserServiceImpl implements UserService {
         UserDocument user = userRepository.findById(usuarioId)
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Usuário não encontrado."));
 
-        Query query = Query.query(Criteria.where("usuarioId").is(user.getId()));
-        List<VisitaDocument> visitas = mongoTemplate.find(query, VisitaDocument.class);
-        List<FeedbackDocument> feedbacks = mongoTemplate.find(query, FeedbackDocument.class);
-
         Map<String, Object> dados = new LinkedHashMap<>();
         dados.put("geradoEm", Instant.now());
         dados.put("usuario", Map.of(
@@ -180,8 +173,8 @@ public class UserServiceImpl implements UserService {
                 "criadoEm", user.getCreatedAt(),
                 "consentimentos", user.getConsentimentos()
         ));
-        dados.put("visitas", visitas);
-        dados.put("feedbacks", feedbacks);
+        dados.put("visitas", visitaConsulta.doUsuario(user.getId()));
+        dados.put("feedbacks", feedbackConsulta.doUsuario(user.getId()));
         return dados;
     }
 
@@ -193,11 +186,12 @@ public class UserServiceImpl implements UserService {
         // Coleta os hospitais afetados ANTES de anonimizar, para recalcular os indicadores
         // e refletir a exclusão imediatamente (os dados permanecem, então os valores não
         // mudam, mas o job de 15min não precisa esperar).
-        Set<String> hospitalIds = hospitaisAfetados(usuarioId);
+        Set<String> hospitalIds = new LinkedHashSet<>(visitaConsulta.hospitaisDoUsuario(usuarioId));
+        hospitalIds.addAll(feedbackConsulta.hospitaisDoUsuario(usuarioId));
 
         // Anonimiza visitas e feedbacks (dados de estatística): desvincula o usuário.
-        anonimizarVisitas(usuarioId);
-        anonimizarFeedbacks(usuarioId);
+        visitaConsulta.anonimizarDoUsuario(usuarioId);
+        feedbackConsulta.anonimizarDoUsuario(usuarioId);
 
         // Remove o documento de usuário (dado pessoal identificável). A senha vive apenas
         // como hash neste mesmo documento — não há coleção de autenticação separada.
@@ -217,44 +211,6 @@ public class UserServiceImpl implements UserService {
                         hospitalId, ex.getMessage());
             }
         }
-    }
-
-    /** Hospitais atingidos por visitas/feedbacks do usuário (antes da anonimização). */
-    private Set<String> hospitaisAfetados(String usuarioId) {
-        Set<String> ids = new LinkedHashSet<>();
-        Query query = Query.query(Criteria.where("usuarioId").is(usuarioId));
-        query.fields().include("hospitalId");
-        mongoTemplate.find(query, VisitaDocument.class)
-                .forEach(v -> { if (v.getHospitalId() != null) ids.add(v.getHospitalId()); });
-        mongoTemplate.find(query, FeedbackDocument.class)
-                .forEach(f -> { if (f.getHospitalId() != null) ids.add(f.getHospitalId()); });
-        return ids;
-    }
-
-    /**
-     * Desvincula o usuário das visitas e apaga o que ainda o identificaria: o
-     * {@code dispositivoId} (o mesmo aparelho liga as visitas entre si e a uma pessoa) e os
-     * pontos de GPS da visita. Ficam hospital, entrada, saída e duração, que é o que a
-     * estatística de tempo usa.
-     */
-    private void anonimizarVisitas(String usuarioId) {
-        Query query = Query.query(Criteria.where("usuarioId").is(usuarioId));
-        Update update = new Update().set("usuarioId", null)
-                .unset("dispositivoId")
-                .unset("pontosAmostrais");
-        mongoTemplate.updateMulti(query, update, VisitaDocument.class);
-    }
-
-    /**
-     * Desvincula o usuário dos feedbacks e marca como anonimizado. O comentário é texto
-     * livre e pode trazer nome, telefone ou o caso da pessoa, então sai junto; as respostas
-     * fechadas e as notas, que entram nos indicadores, ficam.
-     */
-    private void anonimizarFeedbacks(String usuarioId) {
-        Query query = Query.query(Criteria.where("usuarioId").is(usuarioId));
-        Update update = new Update().set("usuarioId", null).set("anonimizado", true)
-                .unset("comentario");
-        mongoTemplate.updateMulti(query, update, FeedbackDocument.class);
     }
 
     /**

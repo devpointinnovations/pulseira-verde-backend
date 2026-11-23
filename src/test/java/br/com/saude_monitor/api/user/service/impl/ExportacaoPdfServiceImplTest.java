@@ -4,6 +4,10 @@ import br.com.saude_monitor.api.feedback.document.FeedbackDocument;
 import br.com.saude_monitor.api.user.document.ConsentimentoItem;
 import br.com.saude_monitor.api.user.document.ConsentimentosDocument;
 import br.com.saude_monitor.api.visita.document.VisitaDocument;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
@@ -23,7 +27,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class ExportacaoPdfServiceImplTest {
 
-    private final ExportacaoPdfServiceImpl service = new ExportacaoPdfServiceImpl();
+    private static final ObjectMapper MAPPER = new ObjectMapper()
+            .registerModule(new JavaTimeModule())
+            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+
+    private final ExportacaoPdfServiceImpl service = new ExportacaoPdfServiceImpl(MAPPER);
 
     private Map<String, Object> dadosCompletos() {
         ConsentimentosDocument consentimentos = ConsentimentosDocument.builder()
@@ -91,6 +99,15 @@ class ExportacaoPdfServiceImplTest {
         byte[] pdf = service.gerar(dados);
 
         assertThat(pdf).isNotEmpty();
+    }
+
+    @Test
+    void camposQueOPdfLeDeVisitasEFeedbacksExistemNoJsonDosDocumentos() {
+        Map<String, Object> visita = MAPPER.convertValue(new VisitaDocument(), new TypeReference<>() { });
+        Map<String, Object> feedback = MAPPER.convertValue(new FeedbackDocument(), new TypeReference<>() { });
+
+        assertThat(visita.keySet()).contains("entrada", "saida", "duracaoMinutos", "status", "origem");
+        assertThat(feedback.keySet()).contains("criadoEm", "nota", "foiAtendido", "comentario");
     }
 
     @Test
