@@ -35,19 +35,6 @@ public class RateLimitService {
     /** Janela em milissegundos (1 minuto). */
     static final long JANELA_MS = 60_000L;
 
-    public enum Grupo {
-        /** Rotas de autenticação sem outra identidade (cadastro, confirmação, senha), por IP. */
-        AUTH,
-        /** Rotas públicas, por usuário, instalação do app ou IP, nesta ordem. */
-        PUBLICO,
-        /** Login, por conta (e-mail), além do limite por IP do {@link #AUTH}. */
-        LOGIN,
-        /** Renovação de sessão, pelo próprio refresh token, nunca pelo IP. */
-        REFRESH,
-        /** Teto de abuso por IP, somando o tráfego limitado inteiro. */
-        IP
-    }
-
     private final RateLimitProperties properties;
 
     /** Relógio em milissegundos; os testes passam um parado para não cruzar a virada da janela. */
@@ -67,7 +54,7 @@ public class RateLimitService {
     }
 
     /** Limite do grupo por minuto, conforme a configuração do ambiente. */
-    public int limite(Grupo grupo) {
+    public int limite(GrupoDeLimite grupo) {
         return switch (grupo) {
             case AUTH, LOGIN, REFRESH -> properties.authPorMinuto();
             case PUBLICO -> properties.publicoPorMinuto();
@@ -81,7 +68,7 @@ public class RateLimitService {
      *
      * @return {@code true} se dentro do limite; {@code false} se deve ser bloqueado (429).
      */
-    public boolean tentarConsumir(String chave, Grupo grupo) {
+    public boolean tentarConsumir(String chave, GrupoDeLimite grupo) {
         return registrar(chave, grupo) <= limite(grupo);
     }
 
@@ -90,7 +77,7 @@ public class RateLimitService {
      * esta). O filtro usa o número para registrar em log só a PRIMEIRA rejeição de cada
      * chave por janela — logar toda rejeição transformaria um ataque num volume de log.
      */
-    public long registrar(String chave, Grupo grupo) {
+    public long registrar(String chave, GrupoDeLimite grupo) {
         long agora = relogioEmMs.getAsLong();
         long janelaInicio = agora - (agora % JANELA_MS);
 

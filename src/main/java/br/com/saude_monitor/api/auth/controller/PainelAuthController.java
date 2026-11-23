@@ -7,6 +7,7 @@ import br.com.saude_monitor.api.auth.dto.RefreshRequest;
 import br.com.saude_monitor.api.auth.service.AuthService;
 import br.com.saude_monitor.api.config.exception.LimiteExcedidoException;
 import br.com.saude_monitor.api.config.exception.NaoAutorizadoException;
+import br.com.saude_monitor.api.config.ratelimit.GrupoDeLimite;
 import br.com.saude_monitor.api.config.ratelimit.RateLimitService;
 import br.com.saude_monitor.api.config.security.JwtService;
 import br.com.saude_monitor.api.user.util.EmailNormalizer;
@@ -58,8 +59,8 @@ public class PainelAuthController {
         logger.info("[PainelAuth] Login do painel recebido para email={}", request.email());
         // Mesmo limite por conta do login do app (ARQ-02), além do limite por IP do filtro.
         if (!rateLimitService.tentarConsumir("login:" + EmailNormalizer.normalizar(request.email()),
-                RateLimitService.Grupo.LOGIN)) {
-            throw new LimiteExcedidoException(rateLimitService.limite(RateLimitService.Grupo.LOGIN));
+                GrupoDeLimite.LOGIN)) {
+            throw new LimiteExcedidoException(rateLimitService.limite(GrupoDeLimite.LOGIN));
         }
         return comCookieDeRefresh(authService.loginPainel(request));
     }

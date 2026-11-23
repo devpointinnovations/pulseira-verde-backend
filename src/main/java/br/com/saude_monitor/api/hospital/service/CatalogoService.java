@@ -96,36 +96,4 @@ public class CatalogoService {
             throw new IllegalStateException("SHA-256 indisponível na JVM.", e);
         }
     }
-
-    /** Um valor montado com o instante em que vence. */
-    private static final class Guardado<T> {
-
-        private final AtomicReference<Validade<T>> atual = new AtomicReference<>();
-
-        T obterOuMontar(Clock clock, Supplier<T> montar) {
-            Validade<T> lido = atual.get();
-            if (lido != null && clock.instant().isBefore(lido.expiraEm())) {
-                return lido.valor();
-            }
-            return remontar(clock, montar);
-        }
-
-        private synchronized T remontar(Clock clock, Supplier<T> montar) {
-            Instant agora = clock.instant();
-            Validade<T> lido = atual.get();
-            if (lido != null && agora.isBefore(lido.expiraEm())) {
-                return lido.valor(); // outra thread remontou enquanto esta esperava
-            }
-            T valor = montar.get();
-            atual.set(new Validade<>(valor, agora.plus(VALIDADE)));
-            return valor;
-        }
-
-        void descartar() {
-            atual.set(null);
-        }
-    }
-
-    private record Validade<T>(T valor, Instant expiraEm) {
-    }
 }
