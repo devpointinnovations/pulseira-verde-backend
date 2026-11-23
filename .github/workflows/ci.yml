@@ -176,6 +176,9 @@ jobs:
     name: Regras e painel de monitoramento
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # Só lê o repositório: o token do job não precisa de mais nada.
+    permissions:
+      contents: read
     env:
       # Mesma versão do Prometheus do perf/docker-compose.yml.
       IMAGEM_PROMETHEUS: prom/prometheus:v3.0.1
