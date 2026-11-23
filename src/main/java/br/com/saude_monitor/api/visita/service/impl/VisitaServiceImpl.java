@@ -7,7 +7,7 @@ import br.com.saude_monitor.api.config.exception.RecursoNaoEncontradoException;
 import br.com.saude_monitor.api.config.exception.ValidacaoNegocioException;
 import br.com.saude_monitor.api.hospital.document.HospitalDocument;
 import br.com.saude_monitor.api.hospital.dto.PageResponse;
-import br.com.saude_monitor.api.hospital.repository.HospitalRepository;
+import br.com.saude_monitor.api.hospital.service.HospitalConsulta;
 import br.com.saude_monitor.api.visita.document.OrigemVisita;
 import br.com.saude_monitor.api.visita.document.PontoAmostralDocument;
 import br.com.saude_monitor.api.visita.document.StatusVisita;
@@ -105,7 +105,7 @@ public class VisitaServiceImpl implements VisitaService {
     private static final List<StatusVisita> STATUS_ATIVOS = StatusVisita.ATIVOS;
 
     private final VisitaRepository visitaRepository;
-    private final HospitalRepository hospitalRepository;
+    private final HospitalConsulta hospitalConsulta;
     private final MongoTemplate mongoTemplate;
 
     @Override
@@ -518,7 +518,7 @@ public class VisitaServiceImpl implements VisitaService {
     }
 
     private String exigirHospitalAtivo(String hospitalId) {
-        HospitalDocument hospital = hospitalRepository.findById(hospitalId)
+        HospitalDocument hospital = hospitalConsulta.findById(hospitalId)
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Hospital não encontrado para o id informado."));
         if (!hospital.isAtivo()) {
             throw new ValidacaoNegocioException("Hospital inativo não pode receber check-in.");
@@ -675,7 +675,7 @@ public class VisitaServiceImpl implements VisitaService {
         if (distintos.isEmpty()) {
             return Map.of();
         }
-        return hospitalRepository.findAllById(distintos).stream()
+        return hospitalConsulta.findAllById(distintos).stream()
                 .collect(Collectors.toMap(HospitalDocument::getId, HospitalDocument::getNome, (a, b) -> a));
     }
 

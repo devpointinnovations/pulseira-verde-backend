@@ -7,7 +7,7 @@ import br.com.saude_monitor.api.feedback.dto.FeedbackResponse;
 import br.com.saude_monitor.api.feedback.service.FeedbackService;
 import br.com.saude_monitor.api.hospital.dto.PageResponse;
 import br.com.saude_monitor.api.user.document.UserDocument;
-import br.com.saude_monitor.api.user.repository.UserRepository;
+import br.com.saude_monitor.api.user.service.UsuarioConsulta;
 import br.com.saude_monitor.api.user.service.ExportacaoPdfService;
 import br.com.saude_monitor.api.user.service.UserService;
 import br.com.saude_monitor.api.visita.dto.VisitaResponse;
@@ -82,8 +82,8 @@ class ContaControllerTest {
 
     @BeforeEach
     void setup() {
-        UserRepository userRepository = mock(UserRepository.class);
-        when(userRepository.findByEmail("marina@email.com"))
+        UsuarioConsulta usuarioConsulta = mock(UsuarioConsulta.class);
+        when(usuarioConsulta.findByEmail("marina@email.com"))
                 .thenReturn(Optional.of(UserDocument.builder().id("u1").build()));
 
         VisitaService visitaService = mock(VisitaService.class);
@@ -110,7 +110,7 @@ class ContaControllerTest {
         validator.afterPropertiesSet();
 
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new ContaController(userService, new AutenticacaoHelper(userRepository),
+                .standaloneSetup(new ContaController(userService, new AutenticacaoHelper(usuarioConsulta),
                         visitaService, feedbackService, exportacaoPdfService))
                 .setValidator(validator)
                 .setControllerAdvice(new GlobalExceptionHandler())

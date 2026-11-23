@@ -22,7 +22,7 @@ import br.com.saude_monitor.api.config.exception.NaoAutorizadoException;
 import br.com.saude_monitor.api.config.security.JwtService;
 import br.com.saude_monitor.api.user.document.Papel;
 import br.com.saude_monitor.api.user.document.UserDocument;
-import br.com.saude_monitor.api.user.repository.UserRepository;
+import br.com.saude_monitor.api.user.service.UsuarioConsulta;
 import br.com.saude_monitor.api.user.util.EmailNormalizer;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -64,7 +64,7 @@ public class AuthServiceImpl implements AuthService {
     /** Valor descartável só para gastar o mesmo tempo de BCrypt no ramo "e-mail não existe". */
     private static final String CODIGO_DUMMY_TEMPO_CONSTANTE = "000000";
 
-    private final UserRepository userRepository;
+    private final UsuarioConsulta usuarioConsulta;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final RefreshTokenRevogadoRepository refreshTokenRevogadoRepository;
@@ -99,7 +99,7 @@ public class AuthServiceImpl implements AuthService {
      * painel, uma conta de usuário comum não se distingue de um e-mail sem cadastro.
      */
     private UserDocument autenticar(LoginRequest request, Predicate<UserDocument> papelPermitido) {
-        Optional<UserDocument> conta = userRepository.findByEmail(normalizeEmail(request.email()))
+        Optional<UserDocument> conta = usuarioConsulta.findByEmail(normalizeEmail(request.email()))
                 .filter(u -> u.getSenhaHash() != null);
         if (conta.isEmpty()) {
             // SEG-03: sem isto, o login de e-mail inexistente respondia sem rodar o BCrypt e
@@ -153,7 +153,7 @@ public class AuthServiceImpl implements AuthService {
         }
 
         String email = jwtService.extractEmail(token);
-        UserDocument user = userRepository.findByEmail(normalizeEmail(email))
+        UserDocument user = usuarioConsulta.findByEmail(normalizeEmail(email))
                 .filter(UserDocument::isActive)
                 .orElseThrow(() -> new NaoAutorizadoException("Usuário não encontrado ou inativo."));
 
@@ -193,7 +193,7 @@ public class AuthServiceImpl implements AuthService {
 
     private Map<String, Object> processarEsqueciSenha(EsqueciSenhaRequest request) {
         String email = normalizeEmail(request.email());
-        boolean existe = userRepository.findByEmail(email).filter(UserDocument::isActive).isPresent();
+        boolean existe = usuarioConsulta.findByEmail(email).filter(UserDocument::isActive).isPresent();
 
         if (existe) {
             gerarEEnviarCodigo(email, Proposito.REDEFINIR_SENHA);
@@ -229,13 +229,13 @@ public class AuthServiceImpl implements AuthService {
             throw new NaoAutorizadoException(CODIGO_INVALIDO);
         }
 
-        UserDocument user = userRepository.findByEmail(email)
+        UserDocument user = usuarioConsulta.findByEmail(email)
                 .filter(UserDocument::isActive)
                 .orElseThrow(() -> new NaoAutorizadoException(CODIGO_INVALIDO));
 
         user.setSenhaHash(passwordEncoder.encode(request.novaSenha()));
         user.setSenhaAlteradaEm(Instant.now());
-        userRepository.save(user);
+        usuarioConsulta.save(user);
 
         codigoVerificacaoRepository.deleteByEmailAndProposito(email, Proposito.REDEFINIR_SENHA);
         logger.info("Senha redefinida via código (esqueci minha senha) para email={}", email);
@@ -277,12 +277,12 @@ public class AuthServiceImpl implements AuthService {
             throw new NaoAutorizadoException(CODIGO_INVALIDO);
         }
 
-        UserDocument user = userRepository.findByEmail(email)
+        UserDocument user = usuarioConsulta.findByEmail(email)
                 .filter(UserDocument::isActive)
                 .orElseThrow(() -> new NaoAutorizadoException(CODIGO_INVALIDO));
 
         user.setEmailVerificado(true);
-        userRepository.save(user);
+        usuarioConsulta.save(user);
 
         codigoVerificacaoRepository.deleteByEmailAndProposito(email, Proposito.CONFIRMAR_EMAIL);
         logger.info("E-mail confirmado no cadastro para email={}", email);
@@ -300,7 +300,7 @@ public class AuthServiceImpl implements AuthService {
 
     private Map<String, Object> processarReenvioConfirmacao(ReenviarConfirmacaoRequest request) {
         String email = normalizeEmail(request.email());
-        boolean enviar = userRepository.findByEmail(email)
+        boolean enviar = usuarioConsulta.findByEmail(email)
                 .filter(UserDocument::isActive)
                 .filter(u -> !u.isEmailVerificado())
                 .isPresent();

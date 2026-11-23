@@ -1,7 +1,7 @@
 package br.com.saude_monitor.api.visita.service.impl;
 
 import br.com.saude_monitor.api.hospital.document.HospitalDocument;
-import br.com.saude_monitor.api.hospital.repository.HospitalRepository;
+import br.com.saude_monitor.api.hospital.service.HospitalConsulta;
 import br.com.saude_monitor.api.visita.document.OrigemVisita;
 import br.com.saude_monitor.api.visita.document.VisitaDocument;
 import br.com.saude_monitor.api.visita.dto.CheckinRequest;
@@ -35,17 +35,17 @@ class VisitaPresencaCheckinTest {
 
     private VisitaServiceImpl visitaService;
     private VisitaRepository visitaRepository;
-    private HospitalRepository hospitalRepository;
+    private HospitalConsulta hospitalConsulta;
     private MongoTemplate mongoTemplate;
 
     @BeforeEach
     void setup() {
         visitaRepository = mock(VisitaRepository.class);
-        hospitalRepository = mock(HospitalRepository.class);
+        hospitalConsulta = mock(HospitalConsulta.class);
         mongoTemplate = mock(MongoTemplate.class);
-        visitaService = new VisitaServiceImpl(visitaRepository, hospitalRepository, mongoTemplate);
+        visitaService = new VisitaServiceImpl(visitaRepository, hospitalConsulta, mongoTemplate);
 
-        when(hospitalRepository.findById("h1"))
+        when(hospitalConsulta.findById("h1"))
                 .thenReturn(Optional.of(HospitalDocument.builder().id("h1").ativo(true).build()));
         when(visitaRepository.findFirstByDispositivoIdAndStatusInOrderByEntradaDesc(anyString(), any()))
                 .thenReturn(Optional.empty());

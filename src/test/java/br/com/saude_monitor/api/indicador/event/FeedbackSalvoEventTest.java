@@ -4,10 +4,10 @@ import br.com.saude_monitor.api.feedback.dto.FeedbackRequest;
 import br.com.saude_monitor.api.feedback.document.FoiAtendido;
 import br.com.saude_monitor.api.feedback.repository.FeedbackRepository;
 import br.com.saude_monitor.api.feedback.service.impl.FeedbackServiceImpl;
-import br.com.saude_monitor.api.hospital.repository.HospitalRepository;
+import br.com.saude_monitor.api.hospital.service.HospitalConsulta;
 import br.com.saude_monitor.api.visita.document.StatusVisita;
 import br.com.saude_monitor.api.visita.document.VisitaDocument;
-import br.com.saude_monitor.api.visita.repository.VisitaRepository;
+import br.com.saude_monitor.api.visita.service.VisitaConsulta;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.ApplicationEventPublisher;
 
@@ -26,11 +26,11 @@ import static org.mockito.Mockito.when;
 class FeedbackSalvoEventTest {
 
     private final FeedbackRepository feedbackRepository = mock(FeedbackRepository.class);
-    private final VisitaRepository visitaRepository = mock(VisitaRepository.class);
-    private final HospitalRepository hospitalRepository = mock(HospitalRepository.class);
+    private final VisitaConsulta visitaConsulta = mock(VisitaConsulta.class);
+    private final HospitalConsulta hospitalConsulta = mock(HospitalConsulta.class);
     private final ApplicationEventPublisher publisher = mock(ApplicationEventPublisher.class);
     private final FeedbackServiceImpl service =
-            new FeedbackServiceImpl(feedbackRepository, visitaRepository, hospitalRepository, publisher, mock(org.springframework.data.mongodb.core.MongoTemplate.class));
+            new FeedbackServiceImpl(feedbackRepository, visitaConsulta, hospitalConsulta, publisher, mock(org.springframework.data.mongodb.core.MongoTemplate.class));
 
     private VisitaDocument visitaFinalizada(String id, String hospitalId) {
         return VisitaDocument.builder().id(id).usuarioId("u1").hospitalId(hospitalId).status(StatusVisita.FINALIZADA).build();
@@ -43,7 +43,7 @@ class FeedbackSalvoEventTest {
 
     @Test
     void devePublicarEventoAoCriarFeedback() {
-        when(visitaRepository.findById("v1")).thenReturn(Optional.of(visitaFinalizada("v1", "hosp-1")));
+        when(visitaConsulta.findById("v1")).thenReturn(Optional.of(visitaFinalizada("v1", "hosp-1")));
         when(feedbackRepository.existsByVisitaId("v1")).thenReturn(false);
         when(feedbackRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -54,7 +54,7 @@ class FeedbackSalvoEventTest {
 
     @Test
     void naoDevePublicarEventoQuandoFeedbackJaExiste() {
-        when(visitaRepository.findById("v1")).thenReturn(Optional.of(visitaFinalizada("v1", "hosp-1")));
+        when(visitaConsulta.findById("v1")).thenReturn(Optional.of(visitaFinalizada("v1", "hosp-1")));
         when(feedbackRepository.existsByVisitaId("v1")).thenReturn(true); // dedupe (RN-12)
 
         try {

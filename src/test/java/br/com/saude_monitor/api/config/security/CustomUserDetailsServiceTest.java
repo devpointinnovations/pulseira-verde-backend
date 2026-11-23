@@ -2,7 +2,7 @@ package br.com.saude_monitor.api.config.security;
 
 import br.com.saude_monitor.api.user.document.Papel;
 import br.com.saude_monitor.api.user.document.UserDocument;
-import br.com.saude_monitor.api.user.repository.UserRepository;
+import br.com.saude_monitor.api.user.service.UsuarioConsulta;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -26,13 +26,13 @@ import static org.mockito.Mockito.when;
  */
 class CustomUserDetailsServiceTest {
 
-    private UserRepository userRepository;
+    private UsuarioConsulta usuarioConsulta;
     private CustomUserDetailsService service;
 
     @BeforeEach
     void setup() {
-        userRepository = mock(UserRepository.class);
-        service = new CustomUserDetailsService(userRepository);
+        usuarioConsulta = mock(UsuarioConsulta.class);
+        service = new CustomUserDetailsService(usuarioConsulta);
     }
 
     @Test
@@ -44,7 +44,7 @@ class CustomUserDetailsServiceTest {
                 .papel(Papel.USER)
                 .active(true)
                 .build();
-        when(userRepository.findByEmail("marina@email.com")).thenReturn(Optional.of(user));
+        when(usuarioConsulta.findByEmail("marina@email.com")).thenReturn(Optional.of(user));
 
         UserDetails details = service.loadUserByUsername("  MARINA@email.com ");
 
@@ -57,7 +57,7 @@ class CustomUserDetailsServiceTest {
     void emailNuloNaoChegaAoRepositorioENaoLancaExcecaoDeAcessoADados() {
         assertThatThrownBy(() -> service.loadUserByUsername(null))
                 .isInstanceOf(UsernameNotFoundException.class);
-        verify(userRepository, never()).findByEmail(eq(null));
+        verify(usuarioConsulta, never()).findByEmail(eq(null));
     }
 
     @Test
@@ -69,7 +69,7 @@ class CustomUserDetailsServiceTest {
                 .papel(Papel.USER)
                 .active(false)
                 .build();
-        when(userRepository.findByEmail("marina@email.com")).thenReturn(Optional.of(user));
+        when(usuarioConsulta.findByEmail("marina@email.com")).thenReturn(Optional.of(user));
 
         UserDetails details = service.loadUserByUsername("marina@email.com");
 
