@@ -27,7 +27,7 @@ public class FeedbackConsulta {
     /** Feedbacks do hospital criados desde o instante e com nota. */
     public List<FeedbackParaIndicador> comNotaDesde(String hospitalId, Instant desde) {
         return feedbackRepository.findByHospitalIdAndCriadoEmAfterAndNotaNotNull(hospitalId, desde).stream()
-                .map(f -> new FeedbackParaIndicador(f.getVisitaId(), f.getNota()))
+                .map(f -> FeedbackParaIndicador.builder().visitaId(f.getVisitaId()).nota(f.getNota()).build())
                 .toList();
     }
 

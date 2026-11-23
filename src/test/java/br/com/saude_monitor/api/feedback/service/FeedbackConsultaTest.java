@@ -73,7 +73,7 @@ class FeedbackConsultaTest {
         when(repository.findByHospitalIdAndCriadoEmAfterAndNotaNotNull("h1", DESDE)).thenReturn(List.of(
                 FeedbackDocument.builder().visitaId("v1").hospitalId("h1").nota(4).comentario("ótimo").build()));
 
-        assertEquals(List.of(new FeedbackParaIndicador("v1", 4)), consulta.comNotaDesde("h1", DESDE));
+        assertEquals(List.of(FeedbackParaIndicador.builder().visitaId("v1").nota(4).build()), consulta.comNotaDesde("h1", DESDE));
     }
 
     @Test

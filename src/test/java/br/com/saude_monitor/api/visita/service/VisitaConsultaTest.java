@@ -105,8 +105,24 @@ class VisitaConsultaTest {
                 .thenReturn(List.of(comprovada, semProva));
 
         assertEquals(
-                List.of(new VisitaParaIndicador(30, true, true, false, T0, T1, null),
-                        new VisitaParaIndicador(10, false, false, true, T0, T1, T1)),
+                List.of(VisitaParaIndicador.builder()
+                        .duracaoMinutos(30)
+                        .comprovada(true)
+                        .finalizada(true)
+                        .gpsInterrompido(false)
+                        .entrada(T0)
+                        .saida(T1)
+                        .ultimaPosicaoEm(null)
+                        .build(),
+                        VisitaParaIndicador.builder()
+                                .duracaoMinutos(10)
+                                .comprovada(false)
+                                .finalizada(false)
+                                .gpsInterrompido(true)
+                                .entrada(T0)
+                                .saida(T1)
+                                .ultimaPosicaoEm(T1)
+                                .build()),
                 consulta.paraIndicadorDeTempo("h1", T0, T1));
     }
 

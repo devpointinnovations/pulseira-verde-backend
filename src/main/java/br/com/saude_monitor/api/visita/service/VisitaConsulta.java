@@ -38,9 +38,15 @@ public class VisitaConsulta {
     public List<VisitaParaIndicador> paraIndicadorDeTempo(String hospitalId, Instant inicio, Instant fim) {
         return visitaRepository.findByHospitalIdAndStatusInAndSaidaBetweenAndTipoPermanencia(
                         hospitalId, STATUS_TEMPO, inicio, fim, TipoPermanencia.ATENDIMENTO).stream()
-                .map(v -> new VisitaParaIndicador(v.getDuracaoMinutos(), PresencaVisita.isComprovada(v),
-                        v.getStatus() == StatusVisita.FINALIZADA, v.getStatus() == StatusVisita.GPS_INTERROMPIDO,
-                        v.getEntrada(), v.getSaida(), v.getUltimaPosicaoEm()))
+                .map(v -> VisitaParaIndicador.builder()
+                        .duracaoMinutos(v.getDuracaoMinutos())
+                        .comprovada(PresencaVisita.isComprovada(v))
+                        .finalizada(v.getStatus() == StatusVisita.FINALIZADA)
+                        .gpsInterrompido(v.getStatus() == StatusVisita.GPS_INTERROMPIDO)
+                        .entrada(v.getEntrada())
+                        .saida(v.getSaida())
+                        .ultimaPosicaoEm(v.getUltimaPosicaoEm())
+                        .build())
                 .toList();
     }
 

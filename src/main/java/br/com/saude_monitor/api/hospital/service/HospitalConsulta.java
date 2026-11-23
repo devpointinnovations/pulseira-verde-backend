@@ -35,7 +35,7 @@ public class HospitalConsulta {
     public List<HospitalNoPonto> ativosComGeofenceContendo(GeoJsonPoint ponto) {
         Query query = new Query(Criteria.where("ativo").is(true).and("geofence").intersects(ponto));
         return mongoTemplate.find(query, HospitalDocument.class).stream()
-                .map(h -> new HospitalNoPonto(h.getId(), h.getNome(), h.getLocalizacao()))
+                .map(h -> HospitalNoPonto.builder().id(h.getId()).nome(h.getNome()).localizacao(h.getLocalizacao()).build())
                 .toList();
     }
 
@@ -47,7 +47,7 @@ public class HospitalConsulta {
     }
 
     private static HospitalParaVisita paraResumo(HospitalDocument h) {
-        return new HospitalParaVisita(h.getId(), h.getNome(), h.isAtivo());
+        return HospitalParaVisita.builder().id(h.getId()).nome(h.getNome()).ativo(h.isAtivo()).build();
     }
 
     public boolean existsById(String id) {

@@ -57,7 +57,7 @@ class HospitalConsultaTest {
         when(repository.findById("h1")).thenReturn(
                 Optional.of(HospitalDocument.builder().id("h1").nome("Hospital Um").ativo(true).build()));
 
-        assertEquals(Optional.of(new HospitalParaVisita("h1", "Hospital Um", true)), consulta.resumo("h1"));
+        assertEquals(Optional.of(HospitalParaVisita.builder().id("h1").nome("Hospital Um").ativo(true).build()), consulta.resumo("h1"));
         assertEquals(Optional.empty(), consulta.resumo("inexistente"));
     }
 
@@ -68,7 +68,7 @@ class HospitalConsultaTest {
                 HospitalDocument.builder().id("h2").nome("Dois").ativo(false).build()));
 
         assertEquals(
-                List.of(new HospitalParaVisita("h1", "Um", true), new HospitalParaVisita("h2", "Dois", false)),
+                List.of(HospitalParaVisita.builder().id("h1").nome("Um").ativo(true).build(), HospitalParaVisita.builder().id("h2").nome("Dois").ativo(false).build()),
                 consulta.resumos(List.of("h1", "h2")));
     }
 
@@ -81,7 +81,7 @@ class HospitalConsultaTest {
 
         List<HospitalNoPonto> resultado = consulta.ativosComGeofenceContendo(ponto);
 
-        assertEquals(List.of(new HospitalNoPonto("h1", "Um", centro)), resultado);
+        assertEquals(List.of(HospitalNoPonto.builder().id("h1").nome("Um").localizacao(centro).build()), resultado);
         verify(mongoTemplate).find(query.capture(), eq(HospitalDocument.class));
         assertEquals(true, query.getValue().getQueryObject().get("ativo"));
         assertTrue(query.getValue().getQueryObject().containsKey("geofence"));
