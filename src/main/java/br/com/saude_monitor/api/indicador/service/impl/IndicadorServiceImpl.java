@@ -5,15 +5,10 @@ import br.com.saude_monitor.api.indicador.dto.IndicadoresDetalheResponse;
 import br.com.saude_monitor.api.indicador.repository.IndicadorHospitalRepository;
 import br.com.saude_monitor.api.indicador.service.IndicadorService;
 import br.com.saude_monitor.api.indicador.service.EstatisticaService;
-import br.com.saude_monitor.api.feedback.document.FeedbackDocument;
 import br.com.saude_monitor.api.feedback.service.FeedbackConsulta;
 import br.com.saude_monitor.api.hospital.dto.IndicadoresResponse;
 import br.com.saude_monitor.api.hospital.service.HospitalConsulta;
-import br.com.saude_monitor.api.visita.document.StatusVisita;
-import br.com.saude_monitor.api.visita.document.TipoPermanencia;
-import br.com.saude_monitor.api.visita.document.VisitaDocument;
 import br.com.saude_monitor.api.visita.service.VisitaConsulta;
-import br.com.saude_monitor.api.visita.service.PresencaVisita;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.mongodb.core.MongoTemplate;
@@ -71,11 +66,6 @@ public class IndicadorServiceImpl implements IndicadorService {
     /** Piso de duração para a métrica de tempo (RN-07): visitas com menos de 2 minutos são ruído e não entram nas estatísticas públicas. */
     static final int DURACAO_MINIMA_MINUTOS = 2;
 
-    /** Status válidos de visita para o indicador de tempo: FINALIZADA (RN-03) e GPS_INTERROMPIDO (RN-06, com cobertura ≥ 90% — RN-17). */
-    private static final List<StatusVisita> STATUS_TEMPO = List.of(
-            StatusVisita.FINALIZADA,
-            StatusVisita.GPS_INTERROMPIDO);
-
     private final IndicadorHospitalRepository indicadorRepository;
     private final FeedbackConsulta feedbackConsulta;
     private final VisitaConsulta visitaConsulta;
@@ -88,30 +78,28 @@ public class IndicadorServiceImpl implements IndicadorService {
         Instant inicio = fim.minus(PERIODO_PADRAO);
 
         // SEG-01: só conta o feedback de visita com prova de presença.
-        List<FeedbackDocument> feedbacks = filtrarDeVisitasComprovadas(feedbackConsulta
-                .findByHospitalIdAndCriadoEmAfterAndNotaNotNull(hospitalId, inicio));
+        List<FeedbackConsulta.ParaIndicador> feedbacks = filtrarDeVisitasComprovadas(
+                feedbackConsulta.comNotaDesde(hospitalId, inicio));
 
         List<Integer> notas = feedbacks.stream()
-                .map(FeedbackDocument::getNota)
+                .map(FeedbackConsulta.ParaIndicador::nota)
                 .toList();
         Double notaMedia = EstatisticaService.notaMedia(notas);
         int nAvaliacoes = (int) feedbacks.stream()
-                .filter(f -> f.getNota() != null && f.getNota() >= 1 && f.getNota() <= 5)
+                .filter(f -> f.nota() != null && f.nota() >= 1 && f.nota() <= 5)
                 .count();
 
-        // Visitas elegíveis para o indicador de tempo: FINALIZADA | GPS_INTERROMPIDO,
-        // no período, com tipoPermanencia ATENDIMENTO (exclui internação/observação, RN-24).
-        List<VisitaDocument> candidatas = visitaConsulta
-                .findByHospitalIdAndStatusInAndSaidaBetweenAndTipoPermanencia(
-                        hospitalId, STATUS_TEMPO, inicio, fim, TipoPermanencia.ATENDIMENTO);
+        // Visitas elegíveis para o indicador de tempo (FINALIZADA | GPS_INTERROMPIDO, no período,
+        // permanência ATENDIMENTO, RN-24): a visita decide, o indicador aplica as regras de duração.
+        List<VisitaConsulta.ParaIndicador> candidatas = visitaConsulta.paraIndicadorDeTempo(hospitalId, inicio, fim);
 
         List<Integer> duracoes = candidatas.stream()
-                .filter(PresencaVisita::isComprovada)
-                .filter(v -> v.getDuracaoMinutos() != null)
-                .filter(v -> v.getDuracaoMinutos() >= DURACAO_MINIMA_MINUTOS)
-                .filter(v -> v.getDuracaoMinutos() <= TETO_DURACAO_MINUTOS)
+                .filter(VisitaConsulta.ParaIndicador::comprovada)
+                .filter(v -> v.duracaoMinutos() != null)
+                .filter(v -> v.duracaoMinutos() >= DURACAO_MINIMA_MINUTOS)
+                .filter(v -> v.duracaoMinutos() <= TETO_DURACAO_MINUTOS)
                 .filter(IndicadorServiceImpl::tempoConfiavel)
-                .map(VisitaDocument::getDuracaoMinutos)
+                .map(VisitaConsulta.ParaIndicador::duracaoMinutos)
                 .toList();
 
         Integer tempoMediano = EstatisticaService.tempoMedianoMinutos(duracoes);
@@ -172,16 +160,11 @@ public class IndicadorServiceImpl implements IndicadorService {
         // bug — não vale a complexidade extra de tentar excluí-lo daqui.
         Instant desde = Instant.now().minus(JANELA_RECALCULO);
 
-        Set<String> candidatos = new HashSet<>();
-        feedbackConsulta.findByCriadoEmAfter(desde)
-                .forEach(f -> candidatos.add(f.getHospitalId()));
-        // Edição pelo dono (até 15 dias após criar) muda a nota de feedback antigo.
-        feedbackConsulta.findByEditadoEmAfter(desde)
-                .forEach(f -> candidatos.add(f.getHospitalId()));
-        // `processadoEm` (write time), não `saida` (business time, pode ser retroativo —
+        // Feedback criado ou editado (a edição pelo dono muda a nota de feedback antigo) e visita
+        // processada: `processadoEm` (write time), não `saida` (business time, pode ser retroativo —
         // ver VisitaDocument.getProcessadoEm()). Achado do code-review de 09/09/2026.
-        visitaConsulta.findByStatusInAndProcessadoEmAfter(STATUS_TEMPO, desde)
-                .forEach(v -> candidatos.add(v.getHospitalId()));
+        Set<String> candidatos = new HashSet<>(feedbackConsulta.hospitaisComAtividadeDesde(desde));
+        candidatos.addAll(visitaConsulta.hospitaisComVisitaProcessadaDesde(desde));
 
         for (String hospitalId : candidatos) {
             try {
@@ -200,19 +183,19 @@ public class IndicadorServiceImpl implements IndicadorService {
      * Visitas FINALIZADA sempre entram (RN-03). Para {@code GPS_INTERROMPIDO} (RN-06),
      * a duração parcial só é confiável se a cobertura de GPS ≥ 90% do período (RN-17).
      */
-    private static boolean tempoConfiavel(VisitaDocument visita) {
-        if (visita.getStatus() == StatusVisita.FINALIZADA) {
+    private static boolean tempoConfiavel(VisitaConsulta.ParaIndicador visita) {
+        if (visita.finalizada()) {
             return true;
         }
-        if (visita.getStatus() != StatusVisita.GPS_INTERROMPIDO) {
+        if (!visita.gpsInterrompido()) {
             return false;
         }
-        Instant entrada = visita.getEntrada();
-        Instant saida = visita.getSaida();
+        Instant entrada = visita.entrada();
+        Instant saida = visita.saida();
         if (entrada == null || saida == null || !saida.isAfter(entrada)) {
             return false;
         }
-        double fracao = EstatisticaService.fracaoCoberta(entrada, saida, visita.getUltimaPosicaoEm());
+        double fracao = EstatisticaService.fracaoCoberta(entrada, saida, visita.ultimaPosicaoEm());
         return fracao >= EstatisticaService.PERCENTUAL_MINIMO_COBERTURA_GPS;
     }
 
@@ -220,22 +203,18 @@ public class IndicadorServiceImpl implements IndicadorService {
      * Mantém só os feedbacks cuja visita tem prova de presença (SEG-01), lendo as visitas em
      * lote. Feedback sem visita encontrada fica de fora.
      */
-    private List<FeedbackDocument> filtrarDeVisitasComprovadas(List<FeedbackDocument> feedbacks) {
+    private List<FeedbackConsulta.ParaIndicador> filtrarDeVisitasComprovadas(
+            List<FeedbackConsulta.ParaIndicador> feedbacks) {
         List<String> visitaIds = feedbacks.stream()
-                .map(FeedbackDocument::getVisitaId)
+                .map(FeedbackConsulta.ParaIndicador::visitaId)
                 .filter(Objects::nonNull)
                 .distinct()
                 .toList();
         if (visitaIds.isEmpty()) {
             return List.of();
         }
-        Set<String> comprovadas = new HashSet<>();
-        visitaConsulta.findAllById(visitaIds).forEach(v -> {
-            if (PresencaVisita.isComprovada(v)) {
-                comprovadas.add(v.getId());
-            }
-        });
-        return feedbacks.stream().filter(f -> comprovadas.contains(f.getVisitaId())).toList();
+        Set<String> comprovadas = visitaConsulta.comPresencaComprovada(visitaIds);
+        return feedbacks.stream().filter(f -> comprovadas.contains(f.visitaId())).toList();
     }
 
     /** Persiste o indicador com upsert idempotente por {@code hospitalId}. */

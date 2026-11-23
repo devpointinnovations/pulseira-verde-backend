@@ -10,6 +10,7 @@ import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -21,6 +22,27 @@ public class FeedbackConsulta {
 
     private final FeedbackRepository feedbackRepository;
     private final MongoTemplate mongoTemplate;
+
+    /** O que o indicador precisa de um feedback: a visita (para a prova de presença) e a nota. */
+    public record ParaIndicador(String visitaId, Integer nota) { }
+
+    /** Feedbacks do hospital criados desde o instante e com nota. */
+    public List<ParaIndicador> comNotaDesde(String hospitalId, Instant desde) {
+        return feedbackRepository.findByHospitalIdAndCriadoEmAfterAndNotaNotNull(hospitalId, desde).stream()
+                .map(f -> new ParaIndicador(f.getVisitaId(), f.getNota()))
+                .toList();
+    }
+
+    /**
+     * Hospitais com feedback criado ou editado desde o instante: a edição pelo dono (até 15
+     * dias depois de criar) muda a nota de um feedback antigo.
+     */
+    public Set<String> hospitaisComAtividadeDesde(Instant desde) {
+        Set<String> hospitais = new HashSet<>();
+        feedbackRepository.findByCriadoEmAfter(desde).forEach(f -> hospitais.add(f.getHospitalId()));
+        feedbackRepository.findByEditadoEmAfter(desde).forEach(f -> hospitais.add(f.getHospitalId()));
+        return hospitais;
+    }
 
     /** Feedbacks da pessoa, para a exportação de dados (LGPD art. 18). */
     public List<FeedbackDocument> doUsuario(String usuarioId) {
@@ -50,17 +72,5 @@ public class FeedbackConsulta {
 
     private static Query porUsuario(String usuarioId) {
         return Query.query(Criteria.where("usuarioId").is(usuarioId));
-    }
-
-    public List<FeedbackDocument> findByHospitalIdAndCriadoEmAfterAndNotaNotNull(String hospitalId, Instant criadoEm) {
-        return feedbackRepository.findByHospitalIdAndCriadoEmAfterAndNotaNotNull(hospitalId, criadoEm);
-    }
-
-    public List<FeedbackDocument> findByCriadoEmAfter(Instant criadoEm) {
-        return feedbackRepository.findByCriadoEmAfter(criadoEm);
-    }
-
-    public List<FeedbackDocument> findByEditadoEmAfter(Instant editadoEm) {
-        return feedbackRepository.findByEditadoEmAfter(editadoEm);
     }
 }
