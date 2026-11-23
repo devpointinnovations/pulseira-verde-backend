@@ -6,3 +6,9 @@ providers:
     disableDeletion: true
     options:
       path: /var/lib/grafana/dashboards
+  - name: pulseira-verde-operacao
+    folder: Pulseira Verde
+    type: file
+    disableDeletion: true
+    options:
+      path: /var/lib/grafana/dashboards-operacao

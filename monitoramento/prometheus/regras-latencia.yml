@@ -1,0 +1,143 @@
+# Regras do E8-06: latência e erro por rota, a partir do histograma do Micrometer
+# (`http.server.requests`, exposto em /actuator/prometheus; ver application.properties).
+#
+# Portáveis de propósito: só PromQL sobre as séries do próprio backend, sem nada da nuvem.
+# Servem a qualquer Prometheus (ou serviço compatível) que colete o backend. A coleta
+# contínua, o Alertmanager e o canal de notificação dependem da migração de infraestrutura
+# e não estão aqui (ver monitoramento/README.md).
+#
+# Convenção: o job de coleta do backend tem nome começando por "backend" (ex.: backend-hom
+# em perf/prometheus/prometheus.yml). As regras filtram por ela para não misturar com
+# outras coletas (o próprio Prometheus, k6, node_exporter).
+#
+# Limiares PROVISÓRIOS: RNF-02 (p95 <= 300 ms) e erro <= 1%, da análise de pendências de
+# 13/11/2026. A calibragem definitiva sai da prova de carga no ambiente novo (P13/PERF-01).
+# Mudou um limiar? Ajuste também o teste em regras-latencia.test.yml.
+
+groups:
+  - name: pulseira-verde-latencia-gravacao
+    interval: 30s
+    rules:
+      # Requisições/s por rota. O /actuator fica de fora: é a própria coleta e a sonda
+      # de saúde, não tráfego de usuário.
+      - record: pv:http_requisicoes:taxa5m
+        expr: >-
+          sum by (job, method, uri) (
+            rate(http_server_requests_seconds_count{job=~"backend.*", uri!~"/actuator.*"}[5m])
+          )
+
+      - record: pv:http_latencia_p50:5m
+        expr: >-
+          histogram_quantile(0.50, sum by (job, method, uri, le) (
+            rate(http_server_requests_seconds_bucket{job=~"backend.*", uri!~"/actuator.*"}[5m])
+          ))
+
+      - record: pv:http_latencia_p95:5m
+        expr: >-
+          histogram_quantile(0.95, sum by (job, method, uri, le) (
+            rate(http_server_requests_seconds_bucket{job=~"backend.*", uri!~"/actuator.*"}[5m])
+          ))
+
+      - record: pv:http_latencia_p99:5m
+        expr: >-
+          histogram_quantile(0.99, sum by (job, method, uri, le) (
+            rate(http_server_requests_seconds_bucket{job=~"backend.*", uri!~"/actuator.*"}[5m])
+          ))
+
+      # 5xx/s por rota (painel) e razão de 5xx no serviço inteiro (alerta). O "or ... * 0"
+      # grava 0 quando não houve nenhum 5xx: sem ele a série nem existe (o Micrometer só
+      # cria a série de um status depois da primeira resposta com ele) e o painel mostra
+      # "sem dados" justamente quando está tudo bem.
+      - record: pv:http_5xx:taxa5m
+        expr: >-
+          sum by (job, method, uri) (
+            rate(http_server_requests_seconds_count{job=~"backend.*", uri!~"/actuator.*", status=~"5.."}[5m])
+          )
+          or
+          sum by (job, method, uri) (
+            rate(http_server_requests_seconds_count{job=~"backend.*", uri!~"/actuator.*"}[5m])
+          ) * 0
+
+      - record: pv:http_5xx:razao5m
+        expr: >-
+          (
+            sum by (job) (
+              rate(http_server_requests_seconds_count{job=~"backend.*", uri!~"/actuator.*", status=~"5.."}[5m])
+            )
+            or
+            sum by (job) (
+              rate(http_server_requests_seconds_count{job=~"backend.*", uri!~"/actuator.*"}[5m])
+            ) * 0
+          )
+          /
+          sum by (job) (
+            rate(http_server_requests_seconds_count{job=~"backend.*", uri!~"/actuator.*"}[5m])
+          )
+
+  - name: pulseira-verde-latencia-alertas
+    rules:
+      # p95 acima do RNF-02 por 10 min, em rota com tráfego de verdade. Sem o piso de
+      # 0,05 req/s (3 por minuto), uma única requisição lenta (cold start, primeira
+      # consulta depois de ocioso) viraria o p95 inteiro da janela e dispararia à toa.
+      # O login fica fora: é caro por desenho (BCrypt) e mediu 310 ms de p95 em
+      # 23/09/2026; o relatório de desempenho recomendou aceitar e documentar.
+      - alert: LatenciaP95AcimaDoOrcamento
+        expr: >-
+          (
+            pv:http_latencia_p95:5m{uri!~"/api/v1/auth(/painel)?/login"} > 0.3
+          )
+          and on (job, method, uri)
+          (
+            pv:http_requisicoes:taxa5m >= 0.05
+          )
+        for: 10m
+        labels:
+          severidade: aviso
+        annotations:
+          resumo: "p95 de {{ $labels.method }} {{ $labels.uri }} acima de 300 ms ({{ $labels.job }})"
+          descricao: "p95 em {{ $value | humanizeDuration }} há mais de 10 min. Orçamento do RNF-02: 300 ms."
+
+      # Login com limiar próprio, provisório, até a prova de carga no ambiente novo.
+      - alert: LatenciaP95LoginAlta
+        expr: >-
+          (
+            pv:http_latencia_p95:5m{uri=~"/api/v1/auth(/painel)?/login"} > 0.5
+          )
+          and on (job, method, uri)
+          (
+            pv:http_requisicoes:taxa5m >= 0.05
+          )
+        for: 10m
+        labels:
+          severidade: aviso
+        annotations:
+          resumo: "p95 do login ({{ $labels.uri }}) acima de 500 ms ({{ $labels.job }})"
+          descricao: "p95 em {{ $value | humanizeDuration }} há mais de 10 min. Medido em 23/09/2026: 310 ms."
+
+      # Mais de 1% de respostas 5xx no serviço por 10 min, com o mesmo piso de tráfego.
+      - alert: TaxaDe5xxAcimaDe1PorCento
+        expr: >-
+          (
+            pv:http_5xx:razao5m > 0.01
+          )
+          and on (job)
+          (
+            sum by (job) (pv:http_requisicoes:taxa5m) >= 0.05
+          )
+        for: 10m
+        labels:
+          severidade: critico
+        annotations:
+          resumo: "{{ $value | humanizePercentage }} das respostas com 5xx ({{ $labels.job }})"
+          descricao: "Acima de 1% por mais de 10 min."
+
+      # Coleta falhando por 5 min: backend fora do ar, ou a coleta perdeu o acesso
+      # (token ou rede). Os dois casos pedem alguém olhando.
+      - alert: BackendSemColeta
+        expr: up{job=~"backend.*"} == 0
+        for: 5m
+        labels:
+          severidade: critico
+        annotations:
+          resumo: "Prometheus não consegue coletar {{ $labels.instance }} ({{ $labels.job }})"
+          descricao: "Backend fora do ar ou coleta sem acesso há mais de 5 min."

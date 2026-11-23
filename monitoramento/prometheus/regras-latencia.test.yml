@@ -1,0 +1,234 @@
+# Testes das regras do E8-06 (promtool test rules), rodados no CI.
+# Cada série é um contador acumulado amostrado a cada 1 min: "0+60x40" = começa em 0 e
+# soma 60 por minuto, por 40 minutos (1 requisição/s). Os buckets "le" seguem o
+# histograma do Micrometer (cumulativos: cada um conta tudo o que ficou abaixo dele).
+
+rule_files:
+  - regras-latencia.yml
+
+evaluation_interval: 30s
+
+tests:
+  # Rota pública lenta (p95 entre 300 e 500 ms) com 1 req/s: dispara depois dos 10 min.
+  - interval: 1m
+    input_series:
+      - series: 'http_server_requests_seconds_bucket{job="backend-hom",method="GET",uri="/api/v1/hospitais",status="200",le="0.1"}'
+        values: '0+10x40'
+      - series: 'http_server_requests_seconds_bucket{job="backend-hom",method="GET",uri="/api/v1/hospitais",status="200",le="0.3"}'
+        values: '0+20x40'
+      - series: 'http_server_requests_seconds_bucket{job="backend-hom",method="GET",uri="/api/v1/hospitais",status="200",le="0.5"}'
+        values: '0+60x40'
+      - series: 'http_server_requests_seconds_bucket{job="backend-hom",method="GET",uri="/api/v1/hospitais",status="200",le="+Inf"}'
+        values: '0+60x40'
+      - series: 'http_server_requests_seconds_count{job="backend-hom",method="GET",uri="/api/v1/hospitais",status="200"}'
+        values: '0+60x40'
+    promql_expr_test:
+      # 57ª de 60 requisições cai no bucket (0,3; 0,5]: 0,3 + 0,2 × (57 − 20) / (60 − 20).
+      - expr: pv:http_latencia_p95:5m
+        eval_time: 20m
+        exp_samples:
+          - labels: 'pv:http_latencia_p95:5m{job="backend-hom",method="GET",uri="/api/v1/hospitais"}'
+            value: 0.485
+      - expr: pv:http_requisicoes:taxa5m
+        eval_time: 20m
+        exp_samples:
+          - labels: 'pv:http_requisicoes:taxa5m{job="backend-hom",method="GET",uri="/api/v1/hospitais"}'
+            value: 1
+    alert_rule_test:
+      # Antes dos 10 min acima do limiar o alerta fica pendente, sem notificar.
+      - eval_time: 8m
+        alertname: LatenciaP95AcimaDoOrcamento
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: LatenciaP95AcimaDoOrcamento
+        exp_alerts:
+          - exp_labels:
+              severidade: aviso
+              job: backend-hom
+              method: GET
+              uri: /api/v1/hospitais
+            exp_annotations:
+              resumo: "p95 de GET /api/v1/hospitais acima de 300 ms (backend-hom)"
+              descricao: "p95 em 485ms há mais de 10 min. Orçamento do RNF-02: 300 ms."
+
+  # Rota lenta (p95 perto de 1 s) com pouco tráfego (1 requisição a cada 2 min): não
+  # dispara. Sem o piso de tráfego dispararia: o teste prova que o piso está lá.
+  - interval: 1m
+    input_series:
+      - series: 'http_server_requests_seconds_bucket{job="backend-hom",method="GET",uri="/api/v1/hospitais/{id}",status="200",le="0.5"}'
+        values: '0+0x40'
+      - series: 'http_server_requests_seconds_bucket{job="backend-hom",method="GET",uri="/api/v1/hospitais/{id}",status="200",le="1"}'
+        values: '0+0.5x40'
+      - series: 'http_server_requests_seconds_bucket{job="backend-hom",method="GET",uri="/api/v1/hospitais/{id}",status="200",le="+Inf"}'
+        values: '0+0.5x40'
+      - series: 'http_server_requests_seconds_count{job="backend-hom",method="GET",uri="/api/v1/hospitais/{id}",status="200"}'
+        values: '0+0.5x40'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: LatenciaP95AcimaDoOrcamento
+        exp_alerts: []
+
+  # Rota rápida (tudo abaixo de 100 ms) com tráfego: não dispara.
+  - interval: 1m
+    input_series:
+      - series: 'http_server_requests_seconds_bucket{job="backend-hom",method="GET",uri="/api/v1/catalogo",status="200",le="0.1"}'
+        values: '0+60x40'
+      - series: 'http_server_requests_seconds_bucket{job="backend-hom",method="GET",uri="/api/v1/catalogo",status="200",le="+Inf"}'
+        values: '0+60x40'
+      - series: 'http_server_requests_seconds_count{job="backend-hom",method="GET",uri="/api/v1/catalogo",status="200"}'
+        values: '0+60x40'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: LatenciaP95AcimaDoOrcamento
+        exp_alerts: []
+
+  # O /actuator (coleta e sonda de saúde) não conta, mesmo lento.
+  - interval: 1m
+    input_series:
+      - series: 'http_server_requests_seconds_bucket{job="backend-hom",method="GET",uri="/actuator/prometheus",status="200",le="0.5"}'
+        values: '0+0x40'
+      - series: 'http_server_requests_seconds_bucket{job="backend-hom",method="GET",uri="/actuator/prometheus",status="200",le="+Inf"}'
+        values: '0+60x40'
+      - series: 'http_server_requests_seconds_count{job="backend-hom",method="GET",uri="/actuator/prometheus",status="200"}'
+        values: '0+60x40'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: LatenciaP95AcimaDoOrcamento
+        exp_alerts: []
+
+  # Login com o p95 medido em 23/09 (~310 ms): fora do alerta geral e abaixo do limiar
+  # próprio de 500 ms.
+  - interval: 1m
+    input_series:
+      - series: 'http_server_requests_seconds_bucket{job="backend-hom",method="POST",uri="/api/v1/auth/login",status="200",le="0.3"}'
+        values: '0+54x40'
+      - series: 'http_server_requests_seconds_bucket{job="backend-hom",method="POST",uri="/api/v1/auth/login",status="200",le="0.4"}'
+        values: '0+60x40'
+      - series: 'http_server_requests_seconds_bucket{job="backend-hom",method="POST",uri="/api/v1/auth/login",status="200",le="+Inf"}'
+        values: '0+60x40'
+      - series: 'http_server_requests_seconds_count{job="backend-hom",method="POST",uri="/api/v1/auth/login",status="200"}'
+        values: '0+60x40'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: LatenciaP95AcimaDoOrcamento
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: LatenciaP95LoginAlta
+        exp_alerts: []
+
+  # Login do painel lento (p95 entre 500 ms e 1 s): dispara o alerta próprio do login.
+  - interval: 1m
+    input_series:
+      - series: 'http_server_requests_seconds_bucket{job="backend-hom",method="POST",uri="/api/v1/auth/painel/login",status="200",le="0.5"}'
+        values: '0+20x40'
+      - series: 'http_server_requests_seconds_bucket{job="backend-hom",method="POST",uri="/api/v1/auth/painel/login",status="200",le="1"}'
+        values: '0+60x40'
+      - series: 'http_server_requests_seconds_bucket{job="backend-hom",method="POST",uri="/api/v1/auth/painel/login",status="200",le="+Inf"}'
+        values: '0+60x40'
+      - series: 'http_server_requests_seconds_count{job="backend-hom",method="POST",uri="/api/v1/auth/painel/login",status="200"}'
+        values: '0+60x40'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: LatenciaP95AcimaDoOrcamento
+        exp_alerts: []
+      # 57ª de 60 no bucket (0,5; 1]: 0,5 + 0,5 × (57 − 20) / (60 − 20) = 0,9625 s.
+      - eval_time: 30m
+        alertname: LatenciaP95LoginAlta
+        exp_alerts:
+          - exp_labels:
+              severidade: aviso
+              job: backend-hom
+              method: POST
+              uri: /api/v1/auth/painel/login
+            exp_annotations:
+              resumo: "p95 do login (/api/v1/auth/painel/login) acima de 500 ms (backend-hom)"
+              descricao: "p95 em 962.5ms há mais de 10 min. Medido em 23/09/2026: 310 ms."
+
+  # 2% de 5xx no serviço (2 de 100 por minuto): dispara.
+  - interval: 1m
+    input_series:
+      - series: 'http_server_requests_seconds_count{job="backend-hom",method="GET",uri="/api/v1/hospitais",status="200"}'
+        values: '0+98x40'
+      - series: 'http_server_requests_seconds_count{job="backend-hom",method="POST",uri="/api/v1/visitas/checkin",status="500"}'
+        values: '0+2x40'
+    promql_expr_test:
+      - expr: pv:http_5xx:razao5m
+        eval_time: 20m
+        exp_samples:
+          - labels: 'pv:http_5xx:razao5m{job="backend-hom"}'
+            value: 0.02
+      # Por rota: a que falha mostra 2 por minuto; a que não falha, 0.
+      - expr: pv:http_5xx:taxa5m
+        eval_time: 20m
+        exp_samples:
+          - labels: 'pv:http_5xx:taxa5m{job="backend-hom",method="POST",uri="/api/v1/visitas/checkin"}'
+            value: 0.03333333333333333
+          - labels: 'pv:http_5xx:taxa5m{job="backend-hom",method="GET",uri="/api/v1/hospitais"}'
+            value: 0
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: TaxaDe5xxAcimaDe1PorCento
+        exp_alerts:
+          - exp_labels:
+              severidade: critico
+              job: backend-hom
+            exp_annotations:
+              resumo: "2% das respostas com 5xx (backend-hom)"
+              descricao: "Acima de 1% por mais de 10 min."
+
+  # Nenhum 5xx: as duas séries de 5xx valem 0 (e não "sem dados").
+  - interval: 1m
+    input_series:
+      - series: 'http_server_requests_seconds_count{job="backend-hom",method="GET",uri="/api/v1/hospitais",status="200"}'
+        values: '0+60x40'
+    promql_expr_test:
+      - expr: pv:http_5xx:razao5m
+        eval_time: 20m
+        exp_samples:
+          - labels: 'pv:http_5xx:razao5m{job="backend-hom"}'
+            value: 0
+      - expr: pv:http_5xx:taxa5m
+        eval_time: 20m
+        exp_samples:
+          - labels: 'pv:http_5xx:taxa5m{job="backend-hom",method="GET",uri="/api/v1/hospitais"}'
+            value: 0
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: TaxaDe5xxAcimaDe1PorCento
+        exp_alerts: []
+
+  # 0,5% de 5xx (1 de 200 por minuto): abaixo do limiar, não dispara.
+  - interval: 1m
+    input_series:
+      - series: 'http_server_requests_seconds_count{job="backend-hom",method="GET",uri="/api/v1/hospitais",status="200"}'
+        values: '0+199x40'
+      - series: 'http_server_requests_seconds_count{job="backend-hom",method="GET",uri="/api/v1/hospitais",status="503"}'
+        values: '0+1x40'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: TaxaDe5xxAcimaDe1PorCento
+        exp_alerts: []
+
+  # Coleta falhando por 5 min: dispara. Uma falha isolada não.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="backend-hom",instance="api:8080"}'
+        values: '1 1 1 0 1 1 1 0 0 0 0 0 0 0'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: BackendSemColeta
+        exp_alerts: []
+      # Fora há 3 min (desde os 7 min): ainda pendente.
+      - eval_time: 10m
+        alertname: BackendSemColeta
+        exp_alerts: []
+      - eval_time: 13m
+        alertname: BackendSemColeta
+        exp_alerts:
+          - exp_labels:
+              severidade: critico
+              job: backend-hom
+              instance: api:8080
+            exp_annotations:
+              resumo: "Prometheus não consegue coletar api:8080 (backend-hom)"
+              descricao: "Backend fora do ar ou coleta sem acesso há mais de 5 min."

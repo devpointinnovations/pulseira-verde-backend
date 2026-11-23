@@ -8,6 +8,12 @@ global:
   scrape_interval: 10s
   evaluation_interval: 10s
 
+# Regras de latencia e erro por rota do E8-06 (monitoramento/prometheus/), montadas pelo
+# docker-compose. Alimentam o painel "Operacao" e mostram os alertas em /alerts. Aqui nao ha
+# Alertmanager: o alerta aparece no Prometheus, mas nao notifica ninguem.
+rule_files:
+  - /etc/prometheus/regras/regras-latencia.yml
+
 scrape_configs:
   - job_name: backend-hom
     scheme: https
