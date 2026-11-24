@@ -1,6 +1,8 @@
 package br.com.saude_monitor.api.hospital.service;
 
+import br.com.saude_monitor.api.hospital.document.CategoriaEstabelecimento;
 import br.com.saude_monitor.api.hospital.document.HospitalDocument;
+import br.com.saude_monitor.api.hospital.dto.HospitalParaMassa;
 import br.com.saude_monitor.api.hospital.dto.HospitalNoPonto;
 import br.com.saude_monitor.api.hospital.dto.HospitalResumo;
 import br.com.saude_monitor.api.hospital.repository.HospitalRepository;
@@ -34,6 +36,22 @@ class HospitalConsultaTest {
         when(repository.existsById("h1")).thenReturn(true);
 
         assertTrue(consulta.existsById("h1"));
+    }
+
+    @Test
+    void ativosParaMassaDevolveIdECategoriaComoPosicaoNaListaEOutroQuandoNula() {
+        when(mongoTemplate.find(any(Query.class), eq(HospitalDocument.class))).thenReturn(List.of(
+                HospitalDocument.builder().id("h1").categoria(CategoriaEstabelecimento.UPA).build(),
+                HospitalDocument.builder().id("h2").build()));
+        ArgumentCaptor<Query> query = ArgumentCaptor.forClass(Query.class);
+
+        List<HospitalParaMassa> hospitais = consulta.ativosParaMassa();
+
+        assertEquals(List.of(
+                HospitalParaMassa.builder().id("h1").categoria(CategoriaEstabelecimento.UPA.ordinal()).build(),
+                HospitalParaMassa.builder().id("h2").categoria(CategoriaEstabelecimento.OUTRO.ordinal()).build()), hospitais);
+        verify(mongoTemplate).find(query.capture(), eq(HospitalDocument.class));
+        assertEquals(true, query.getValue().getQueryObject().get("ativo"));
     }
 
     @Test
