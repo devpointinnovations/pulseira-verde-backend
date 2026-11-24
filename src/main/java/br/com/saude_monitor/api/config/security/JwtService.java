@@ -1,6 +1,5 @@
 package br.com.saude_monitor.api.config.security;
 
-import br.com.saude_monitor.api.user.dto.UsuarioAutenticavel;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtBuilder;
 import io.jsonwebtoken.JwtParser;

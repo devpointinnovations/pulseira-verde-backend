@@ -1,4 +1,4 @@
-package br.com.saude_monitor.api.user.util;
+package br.com.saude_monitor.api.config.util;
 
 import java.util.Locale;
 

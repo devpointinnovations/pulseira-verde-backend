@@ -3,7 +3,7 @@ package br.com.saude_monitor.api.user.service;
 import br.com.saude_monitor.api.config.exception.RecursoNaoEncontradoException;
 import br.com.saude_monitor.api.user.document.Papel;
 import br.com.saude_monitor.api.user.document.UserDocument;
-import br.com.saude_monitor.api.user.dto.UsuarioAutenticavel;
+import br.com.saude_monitor.api.config.security.UsuarioAutenticavel;
 import br.com.saude_monitor.api.user.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 

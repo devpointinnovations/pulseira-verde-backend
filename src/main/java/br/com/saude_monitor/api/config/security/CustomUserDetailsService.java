@@ -1,8 +1,6 @@
 package br.com.saude_monitor.api.config.security;
 
-import br.com.saude_monitor.api.user.dto.UsuarioAutenticavel;
-import br.com.saude_monitor.api.user.service.UsuarioConsulta;
-import br.com.saude_monitor.api.user.util.EmailNormalizer;
+import br.com.saude_monitor.api.config.util.EmailNormalizer;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -21,7 +19,7 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class CustomUserDetailsService implements UserDetailsService {
 
-    private final UsuarioConsulta usuarioConsulta;
+    private final FonteDeContas fonteDeContas;
 
     @Override
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
@@ -32,7 +30,7 @@ public class CustomUserDetailsService implements UserDetailsService {
             // do Spring Data (comportamento não garantido pelo driver do Mongo).
             throw new UsernameNotFoundException("Usuário não encontrado: " + email);
         }
-        UsuarioAutenticavel user = usuarioConsulta.autenticavelPorEmail(normalizado)
+        UsuarioAutenticavel user = fonteDeContas.autenticavelPorEmail(normalizado)
                 .orElseThrow(() -> new UsernameNotFoundException("Usuário não encontrado: " + email));
 
         return User.withUsername(user.email())

@@ -4,7 +4,7 @@ import br.com.saude_monitor.api.config.trava.TravaDistribuida;
 import br.com.saude_monitor.api.user.document.Papel;
 import br.com.saude_monitor.api.user.document.UserDocument;
 import br.com.saude_monitor.api.user.repository.UserRepository;
-import br.com.saude_monitor.api.user.util.EmailNormalizer;
+import br.com.saude_monitor.api.config.util.EmailNormalizer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;

@@ -1,6 +1,7 @@
 package br.com.saude_monitor.api.configuracao.service;
 
 import br.com.saude_monitor.api.config.contencao.ContencaoProperties;
+import br.com.saude_monitor.api.config.contencao.SomenteLeitura;
 import br.com.saude_monitor.api.configuracao.document.ConfiguracaoRemotaDocument;
 import br.com.saude_monitor.api.configuracao.dto.ConfiguracaoRemotaRequest;
 import br.com.saude_monitor.api.configuracao.dto.ConfiguracaoRemotaResponse;
@@ -87,6 +88,17 @@ class ConfiguracaoRemotaServiceTest {
         ConfiguracaoRemotaResponse resposta = criarServico(new ContencaoProperties(80, 5, 300, true)).obterConfiguracao();
 
         assertThat(resposta).isEqualTo(new ConfiguracaoRemotaResponse(true, "1.0.0", "aviso"));
+    }
+
+    @Test
+    void somenteLeituraDevolveOEstadoELigadoPelaVariavelDeAmbienteMesmoSemConfiguracaoLigada() {
+        when(repository.findById(ConfiguracaoRemotaDocument.ID_UNICO)).thenReturn(criarConfiguracaoGravada(false, "1.0.0"));
+
+        SomenteLeitura normal = criarServico(NORMAL).somenteLeitura();
+        SomenteLeitura forcado = criarServico(new ContencaoProperties(80, 5, 300, true)).somenteLeitura();
+
+        assertThat(normal).isEqualTo(SomenteLeitura.builder().ativo(false).mensagem("aviso").build());
+        assertThat(forcado).isEqualTo(SomenteLeitura.builder().ativo(true).mensagem("aviso").build());
     }
 
     @Test

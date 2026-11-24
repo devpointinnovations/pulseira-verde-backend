@@ -1,7 +1,5 @@
 package br.com.saude_monitor.api.config.contencao;
 
-import br.com.saude_monitor.api.configuracao.dto.ConfiguracaoRemotaResponse;
-import br.com.saude_monitor.api.configuracao.service.ConfiguracaoRemotaService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -21,12 +19,12 @@ import static org.mockito.Mockito.when;
 class ModoSomenteLeituraFilterTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
-    private final ConfiguracaoRemotaService configuracao = mock(ConfiguracaoRemotaService.class);
+    private final FonteDoModoSomenteLeitura configuracao = mock(FonteDoModoSomenteLeitura.class);
     private final ModoSomenteLeituraFilter filter = new ModoSomenteLeituraFilter(
             configuracao, new ContencaoProperties(80, 5, 300, false), objectMapper);
 
     private void configurarModo(boolean ligado, String mensagem) {
-        when(configuracao.obterConfiguracao()).thenReturn(new ConfiguracaoRemotaResponse(ligado, null, mensagem));
+        when(configuracao.somenteLeitura()).thenReturn(SomenteLeitura.builder().ativo(ligado).mensagem(mensagem).build());
     }
 
     private boolean isRequisicaoAceita(String metodo, String uri, MockHttpServletResponse resposta) throws Exception {

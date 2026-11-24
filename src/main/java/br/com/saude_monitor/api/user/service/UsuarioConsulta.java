@@ -1,8 +1,9 @@
 package br.com.saude_monitor.api.user.service;
 
 import br.com.saude_monitor.api.config.exception.RecursoNaoEncontradoException;
+import br.com.saude_monitor.api.config.security.FonteDeContas;
 import br.com.saude_monitor.api.user.document.UserDocument;
-import br.com.saude_monitor.api.user.dto.UsuarioAutenticavel;
+import br.com.saude_monitor.api.config.security.UsuarioAutenticavel;
 import br.com.saude_monitor.api.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -16,11 +17,12 @@ import java.util.Optional;
  */
 @Service
 @RequiredArgsConstructor
-public class UsuarioConsulta {
+public class UsuarioConsulta implements FonteDeContas {
 
     private final UserRepository userRepository;
 
     /** A conta pelo e-mail (já normalizado), como o login e a segurança a enxergam. */
+    @Override
     public Optional<UsuarioAutenticavel> autenticavelPorEmail(String email) {
         return userRepository.findByEmail(email).map(UsuarioConsulta::paraAutenticavel);
     }

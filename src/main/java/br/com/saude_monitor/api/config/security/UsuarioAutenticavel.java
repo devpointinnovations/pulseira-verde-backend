@@ -1,4 +1,4 @@
-package br.com.saude_monitor.api.user.dto;
+package br.com.saude_monitor.api.config.security;
 
 import lombok.Builder;
 

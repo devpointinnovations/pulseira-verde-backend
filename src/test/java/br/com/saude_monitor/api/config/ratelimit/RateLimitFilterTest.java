@@ -2,7 +2,7 @@ package br.com.saude_monitor.api.config.ratelimit;
 
 import br.com.saude_monitor.api.config.security.JwtProperties;
 import br.com.saude_monitor.api.config.security.JwtService;
-import br.com.saude_monitor.api.user.dto.UsuarioAutenticavel;
+import br.com.saude_monitor.api.config.security.UsuarioAutenticavel;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.junit.jupiter.api.BeforeEach;
