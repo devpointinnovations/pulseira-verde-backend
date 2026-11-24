@@ -381,7 +381,7 @@ class FeedbackServiceImplTest {
         org.mockito.ArgumentCaptor<FeedbackDocument> salvo = org.mockito.ArgumentCaptor.forClass(FeedbackDocument.class);
         verify(feedbackRepository).save(salvo.capture());
         assertThat(salvo.getValue().getEditadoEm()).isNotNull();
-        verify(eventPublisher).publishEvent(any(br.com.saude_monitor.api.indicador.event.FeedbackSalvoEvent.class));
+        verify(eventPublisher).publishEvent(any(br.com.saude_monitor.api.feedback.event.FeedbackSalvoEvent.class));
     }
 
     @Test

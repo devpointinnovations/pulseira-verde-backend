@@ -12,5 +12,4 @@ Ciclo entre módulos: user -> feedback
 Ciclo entre módulos: user -> hospital
 Ciclo entre módulos: user -> indicador
 Ciclo entre módulos: user -> visita
-Ciclo entre módulos: visita -> feedback
 Ciclo entre módulos: visita -> hospital

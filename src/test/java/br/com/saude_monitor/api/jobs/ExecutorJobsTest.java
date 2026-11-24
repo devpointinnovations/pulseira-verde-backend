@@ -4,7 +4,6 @@ import br.com.saude_monitor.api.config.trava.TravaDistribuida;
 import br.com.saude_monitor.api.configuracao.service.ConfiguracaoRemotaService;
 import br.com.saude_monitor.api.feedback.service.FeedbackSemRespostaJob;
 import br.com.saude_monitor.api.indicador.service.IndicadorHospitalJob;
-import br.com.saude_monitor.api.visita.service.RetencaoDadosPessoaisJob;
 import br.com.saude_monitor.api.visita.service.VisitaExpiracaoJob;
 import br.com.saude_monitor.api.visita.service.VisitaGpsInterrompidoJob;
 import org.junit.jupiter.api.Test;
