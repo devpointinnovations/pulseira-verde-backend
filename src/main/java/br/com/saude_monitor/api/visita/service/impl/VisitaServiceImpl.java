@@ -6,7 +6,7 @@ import br.com.saude_monitor.api.config.exception.NaoAutorizadoException;
 import br.com.saude_monitor.api.config.exception.RecursoNaoEncontradoException;
 import br.com.saude_monitor.api.config.exception.ValidacaoNegocioException;
 import br.com.saude_monitor.api.hospital.dto.HospitalNoPonto;
-import br.com.saude_monitor.api.hospital.dto.HospitalParaVisita;
+import br.com.saude_monitor.api.hospital.dto.HospitalResumo;
 import br.com.saude_monitor.api.hospital.dto.PageResponse;
 import br.com.saude_monitor.api.hospital.service.HospitalConsulta;
 import br.com.saude_monitor.api.visita.document.OrigemVisita;
@@ -516,7 +516,7 @@ public class VisitaServiceImpl implements VisitaService {
     }
 
     private String exigirHospitalAtivo(String hospitalId) {
-        HospitalParaVisita hospital = hospitalConsulta.resumo(hospitalId)
+        HospitalResumo hospital = hospitalConsulta.resumo(hospitalId)
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Hospital não encontrado para o id informado."));
         if (!hospital.ativo()) {
             throw new ValidacaoNegocioException("Hospital inativo não pode receber check-in.");
@@ -674,7 +674,7 @@ public class VisitaServiceImpl implements VisitaService {
             return Map.of();
         }
         return hospitalConsulta.resumos(distintos).stream()
-                .collect(Collectors.toMap(HospitalParaVisita::id, HospitalParaVisita::nome, (a, b) -> a));
+                .collect(Collectors.toMap(HospitalResumo::id, HospitalResumo::nome, (a, b) -> a));
     }
 
     private VisitaResponse toResponse(VisitaDocument v) {

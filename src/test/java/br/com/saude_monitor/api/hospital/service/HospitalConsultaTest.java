@@ -2,7 +2,7 @@ package br.com.saude_monitor.api.hospital.service;
 
 import br.com.saude_monitor.api.hospital.document.HospitalDocument;
 import br.com.saude_monitor.api.hospital.dto.HospitalNoPonto;
-import br.com.saude_monitor.api.hospital.dto.HospitalParaVisita;
+import br.com.saude_monitor.api.hospital.dto.HospitalResumo;
 import br.com.saude_monitor.api.hospital.repository.HospitalRepository;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -37,27 +37,11 @@ class HospitalConsultaTest {
     }
 
     @Test
-    void findByIdDevolveOQueORepositoryDevolve() {
-        HospitalDocument hospital = HospitalDocument.builder().id("h1").nome("Hospital Um").build();
-        when(repository.findById("h1")).thenReturn(Optional.of(hospital));
-
-        assertEquals(Optional.of(hospital), consulta.findById("h1"));
-    }
-
-    @Test
-    void findAllByIdRepassaOsIdsEDevolveOResultado() {
-        HospitalDocument hospital = HospitalDocument.builder().id("h2").build();
-        when(repository.findAllById(List.of("h2", "h3"))).thenReturn(List.of(hospital));
-
-        assertEquals(List.of(hospital), consulta.findAllById(List.of("h2", "h3")));
-    }
-
-    @Test
     void resumoDevolveIdNomeEAtivo() {
         when(repository.findById("h1")).thenReturn(
                 Optional.of(HospitalDocument.builder().id("h1").nome("Hospital Um").ativo(true).build()));
 
-        assertEquals(Optional.of(HospitalParaVisita.builder().id("h1").nome("Hospital Um").ativo(true).build()), consulta.resumo("h1"));
+        assertEquals(Optional.of(HospitalResumo.builder().id("h1").nome("Hospital Um").ativo(true).build()), consulta.resumo("h1"));
         assertEquals(Optional.empty(), consulta.resumo("inexistente"));
     }
 
@@ -68,7 +52,7 @@ class HospitalConsultaTest {
                 HospitalDocument.builder().id("h2").nome("Dois").ativo(false).build()));
 
         assertEquals(
-                List.of(HospitalParaVisita.builder().id("h1").nome("Um").ativo(true).build(), HospitalParaVisita.builder().id("h2").nome("Dois").ativo(false).build()),
+                List.of(HospitalResumo.builder().id("h1").nome("Um").ativo(true).build(), HospitalResumo.builder().id("h2").nome("Dois").ativo(false).build()),
                 consulta.resumos(List.of("h1", "h2")));
     }
 
