@@ -1,4 +1,4 @@
-package br.com.saude_monitor.api.indicador.event;
+package br.com.saude_monitor.api.feedback.event;
 
 import br.com.saude_monitor.api.feedback.dto.FeedbackRequest;
 import br.com.saude_monitor.api.feedback.document.FoiAtendido;

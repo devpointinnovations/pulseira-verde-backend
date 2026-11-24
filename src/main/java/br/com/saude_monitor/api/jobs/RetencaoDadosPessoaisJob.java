@@ -1,6 +1,7 @@
-package br.com.saude_monitor.api.visita.service;
+package br.com.saude_monitor.api.jobs;
 
 import br.com.saude_monitor.api.feedback.service.FeedbackService;
+import br.com.saude_monitor.api.visita.service.VisitaService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;

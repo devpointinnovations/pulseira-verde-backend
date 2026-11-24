@@ -1,7 +1,7 @@
 package br.com.saude_monitor.api.feedback.service.impl;
 
 import br.com.saude_monitor.api.hospital.dto.HospitalResumo;
-import br.com.saude_monitor.api.indicador.event.FeedbackSalvoEvent;
+import br.com.saude_monitor.api.feedback.event.FeedbackSalvoEvent;
 import br.com.saude_monitor.api.config.exception.AcessoNegadoException;
 import br.com.saude_monitor.api.config.exception.ConflitoException;
 import br.com.saude_monitor.api.config.exception.RecursoNaoEncontradoException;
