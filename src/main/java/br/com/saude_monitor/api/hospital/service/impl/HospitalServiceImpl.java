@@ -1,6 +1,5 @@
 package br.com.saude_monitor.api.hospital.service.impl;
 
-import br.com.saude_monitor.api.indicador.service.IndicadorService;
 import br.com.saude_monitor.api.config.exception.ConflitoException;
 import br.com.saude_monitor.api.config.exception.RecursoNaoEncontradoException;
 import br.com.saude_monitor.api.config.security.AutenticacaoHelper;
@@ -31,6 +30,7 @@ import br.com.saude_monitor.api.hospital.repository.SugestaoHospitalRepository;
 import br.com.saude_monitor.api.hospital.service.GeofenceFactory;
 import br.com.saude_monitor.api.hospital.service.GeofenceValidator;
 import br.com.saude_monitor.api.hospital.service.HospitalService;
+import br.com.saude_monitor.api.hospital.service.IndicadoresDosHospitais;
 import br.com.saude_monitor.api.regiao.service.RegiaoAdministrativaResolver;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.mongodb.core.geo.GeoJsonPoint;
@@ -73,7 +73,7 @@ public class HospitalServiceImpl implements HospitalService {
     private final GeofenceValidator geofenceValidator;
     private final GeofenceFactory geofenceFactory;
     private final AutenticacaoHelper autenticacaoHelper;
-    private final IndicadorService indicadorService;
+    private final IndicadoresDosHospitais indicadoresDosHospitais;
     private final RegiaoAdministrativaResolver regiaoAdministrativaResolver;
 
     @Override
@@ -503,13 +503,13 @@ public class HospitalServiceImpl implements HospitalService {
 
     /** Indicadores embutidos de um único hospital (detalhe/escrita), com cache por chamada. */
     private IndicadoresResponse indicadoresDe(HospitalDocument d) {
-        return indicadorService.mapaIndicadores(List.of(d.getId())).getFirst();
+        return indicadoresDosHospitais.mapaIndicadores(List.of(d.getId())).getFirst();
     }
 
     /** Mapa id do hospital → indicadores, calculado em lote para listagens (evita N+1). */
     private Map<String, IndicadoresResponse> mapaIndicadores(List<HospitalDocument> documentos) {
         List<String> ids = documentos.stream().map(HospitalDocument::getId).toList();
-        List<IndicadoresResponse> indicadores = indicadorService.mapaIndicadores(ids);
+        List<IndicadoresResponse> indicadores = indicadoresDosHospitais.mapaIndicadores(ids);
         java.util.LinkedHashMap<String, IndicadoresResponse> mapa = new java.util.LinkedHashMap<>();
         for (int i = 0; i < documentos.size(); i++) {
             mapa.put(documentos.get(i).getId(), indicadores.get(i));
