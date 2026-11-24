@@ -117,27 +117,24 @@ public class ReconciliacaoRegiaoAdministrativaRunner implements ApplicationRunne
         }
     }
 
-    /** O que a reconciliação fez com um estabelecimento. */
-    private enum Situacao { PREENCHIDO, FORA_DE_TODA_REGIAO, SEM_LOCALIZACAO, JA_PREENCHIDO }
-
     /** Decide o caso de um estabelecimento e, se for o caso, agenda a gravação da região. */
-    private Situacao preencher(HospitalDocument hospital, BulkOperations bulkOps) {
+    private SituacaoRegiaoAdministrativa preencher(HospitalDocument hospital, BulkOperations bulkOps) {
         if (hospital.getRegiaoAdministrativa() != null && !hospital.getRegiaoAdministrativa().isBlank()) {
-            return Situacao.JA_PREENCHIDO;
+            return SituacaoRegiaoAdministrativa.JA_PREENCHIDO;
         }
         GeoJsonPoint centro = hospital.getLocalizacao();
         if (centro == null) {
-            return Situacao.SEM_LOCALIZACAO;
+            return SituacaoRegiaoAdministrativa.SEM_LOCALIZACAO;
         }
 
         Optional<String> regiao = resolver.resolver(centro.getX(), centro.getY());
         if (regiao.isEmpty()) {
-            return Situacao.FORA_DE_TODA_REGIAO;
+            return SituacaoRegiaoAdministrativa.FORA_DE_TODA_REGIAO;
         }
 
         bulkOps.updateOne(
                 Query.query(Criteria.where("id").is(hospital.getId())),
                 Update.update("regiaoAdministrativa", regiao.get()).set("atualizadoEm", Instant.now()));
-        return Situacao.PREENCHIDO;
+        return SituacaoRegiaoAdministrativa.PREENCHIDO;
     }
 }

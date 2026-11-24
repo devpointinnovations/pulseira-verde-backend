@@ -58,7 +58,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
 
-        RateLimitService.Grupo grupo = resolverGrupo(request.getMethod(), request.getRequestURI());
+        GrupoDeLimite grupo = resolverGrupo(request.getMethod(), request.getRequestURI());
         if (grupo == null) {
             filterChain.doFilter(request, response);
             return;
@@ -66,14 +66,14 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
         String ip = resolverIp(request);
         // Camada 1: teto de abuso por IP, alto, somando o tráfego limitado (ARQ-02).
-        if (bloquearSeLimiteExcedido(request, response, RateLimitService.Grupo.IP, PREFIXO_IP + ip, "ip " + ip)) {
+        if (bloquearSeLimiteExcedido(request, response, GrupoDeLimite.IP, PREFIXO_IP + ip, "ip " + ip)) {
             return;
         }
 
         // Camada 2: limite de cada pessoa. A renovação de sessão não passa por aqui: ela é
         // limitada pelo próprio refresh token, no AuthController, e nunca pelo IP.
         if (!ROTA_REFRESH.equals(request.getRequestURI())) {
-            Identidade identidade = identificarCliente(request, grupo, ip);
+            IdentidadeDoLimite identidade = identificarCliente(request, grupo, ip);
             response.setHeader(HEADER_LIMITE, String.valueOf(rateLimitService.limite(grupo)));
             if (bloquearSeLimiteExcedido(request, response, grupo, identidade.chave(), identidade.descricao())) {
                 return;
@@ -83,10 +83,6 @@ public class RateLimitFilter extends OncePerRequestFilter {
         filterChain.doFilter(request, response);
     }
 
-    /** Chave do limite e como ela aparece no log (sem e-mail nem id em claro). */
-    record Identidade(String chave, String descricao) {
-    }
-
     /**
      * Quem conta no limite. Nas rotas públicas: o usuário do access token válido, depois a
      * instalação do app ({@value #HEADER_CLIENTE}), e só então o IP. Atrás do CGNAT das
@@ -94,25 +90,28 @@ public class RateLimitFilter extends OncePerRequestFilter {
      * uns derrubar o check-in e o heartbeat dos outros. Nas rotas de autenticação, o IP
      * (o login também é limitado por conta, no AuthController).
      */
-    Identidade identificarCliente(HttpServletRequest request, RateLimitService.Grupo grupo, String ip) {
-        if (grupo == RateLimitService.Grupo.PUBLICO) {
+    IdentidadeDoLimite identificarCliente(HttpServletRequest request, GrupoDeLimite grupo, String ip) {
+        if (grupo == GrupoDeLimite.PUBLICO) {
             String autorizacao = request.getHeader("Authorization");
             if (autorizacao != null && autorizacao.startsWith(PREFIXO_BEARER)) {
                 var usuario = jwtService.extrairAssuntoDoAccessToken(autorizacao.substring(PREFIXO_BEARER.length()));
                 if (usuario.isPresent()) {
-                    return new Identidade("usuario:" + usuario.get(), "usuário autenticado");
+                    return IdentidadeDoLimite.builder()
+                            .chave("usuario:" + usuario.get())
+                            .descricao("usuário autenticado")
+                            .build();
                 }
             }
             String cliente = request.getHeader(HEADER_CLIENTE);
             if (cliente != null && FORMATO_CLIENTE.matcher(cliente).matches()) {
-                return new Identidade("cliente:" + cliente, "instalação do app");
+                return IdentidadeDoLimite.builder().chave("cliente:" + cliente).descricao("instalação do app").build();
             }
         }
-        return new Identidade(PREFIXO_IP + ip, "ip " + ip);
+        return IdentidadeDoLimite.builder().chave(PREFIXO_IP + ip).descricao("ip " + ip).build();
     }
 
     private boolean bloquearSeLimiteExcedido(HttpServletRequest request, HttpServletResponse response,
-                            RateLimitService.Grupo grupo, String chave, String descricao) throws IOException {
+                            GrupoDeLimite grupo, String chave, String descricao) throws IOException {
         long feitas = rateLimitService.registrar(chave, grupo);
         int limite = rateLimitService.limite(grupo);
         if (feitas <= limite) {
@@ -135,15 +134,15 @@ public class RateLimitFilter extends OncePerRequestFilter {
      * @return o grupo, ou {@code null} se o recurso não deve ser limitado
      *         (ex.: endpoints autenticados).
      */
-    RateLimitService.Grupo resolverGrupo(String method, String uri) {
+    GrupoDeLimite resolverGrupo(String method, String uri) {
         // Auth: cadastro, login, refresh, confirmação e senha.
         if (uri.startsWith("/api/v1/auth/")) {
-            return RateLimitService.Grupo.AUTH;
+            return GrupoDeLimite.AUTH;
         }
 
         // Endpoints públicos diversos (padrão 60/min).
         if (isPublico(method, uri)) {
-            return RateLimitService.Grupo.PUBLICO;
+            return GrupoDeLimite.PUBLICO;
         }
 
         return null;

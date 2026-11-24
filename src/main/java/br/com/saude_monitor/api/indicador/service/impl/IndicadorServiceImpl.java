@@ -3,6 +3,7 @@ package br.com.saude_monitor.api.indicador.service.impl;
 import br.com.saude_monitor.api.feedback.dto.FeedbackParaIndicador;
 import br.com.saude_monitor.api.indicador.document.IndicadorHospitalDocument;
 import br.com.saude_monitor.api.indicador.dto.IndicadoresDetalheResponse;
+import br.com.saude_monitor.api.indicador.dto.PeriodoDoIndicador;
 import br.com.saude_monitor.api.indicador.repository.IndicadorHospitalRepository;
 import br.com.saude_monitor.api.indicador.service.IndicadorService;
 import br.com.saude_monitor.api.indicador.service.EstatisticaService;
@@ -250,7 +251,7 @@ public class IndicadorServiceImpl implements IndicadorService {
         boolean disponivel = a.getNAvaliacoes() != null && a.getNAvaliacoes() >= 5;
         var periodo = a.getPeriodoInicio() == null || a.getPeriodoFim() == null
                 ? null
-                : new IndicadoresDetalheResponse.Periodo(a.getPeriodoInicio(), a.getPeriodoFim());
+                : PeriodoDoIndicador.builder().inicio(a.getPeriodoInicio()).fim(a.getPeriodoFim()).build();
         return new IndicadoresDetalheResponse(
                 a.getHospitalId(),
                 disponivel,

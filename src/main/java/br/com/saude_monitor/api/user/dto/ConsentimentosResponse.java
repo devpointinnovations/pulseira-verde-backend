@@ -12,30 +12,20 @@ import java.time.Instant;
  * gravado — inclusive a data do aceite/revogação, que serve de comprovante.</p>
  */
 public record ConsentimentosResponse(
-        Finalidade localizacao,
-        Finalidade notificacoes,
-        Finalidade termosUso
+        FinalidadeResponse localizacao,
+        FinalidadeResponse notificacoes,
+        FinalidadeResponse termosUso
 ) {
-
-    /** Situação de uma finalidade específica. */
-    public record Finalidade(boolean aceito, Instant data, String versao) {
-
-        static Finalidade de(ConsentimentoItem item) {
-            return item == null
-                    ? new Finalidade(false, null, null)
-                    : new Finalidade(item.isAceito(), item.getData(), item.getVersao());
-        }
-    }
 
     public static ConsentimentosResponse de(ConsentimentosDocument consentimentos) {
         if (consentimentos == null) {
             return new ConsentimentosResponse(
-                    Finalidade.de(null), Finalidade.de(null), Finalidade.de(null));
+                    FinalidadeResponse.de(null), FinalidadeResponse.de(null), FinalidadeResponse.de(null));
         }
         return new ConsentimentosResponse(
-                Finalidade.de(consentimentos.getLocalizacao()),
-                Finalidade.de(consentimentos.getNotificacoes()),
-                Finalidade.de(consentimentos.getTermosUso())
+                FinalidadeResponse.de(consentimentos.getLocalizacao()),
+                FinalidadeResponse.de(consentimentos.getNotificacoes()),
+                FinalidadeResponse.de(consentimentos.getTermosUso())
         );
     }
 }

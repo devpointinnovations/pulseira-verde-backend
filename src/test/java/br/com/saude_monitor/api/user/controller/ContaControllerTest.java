@@ -7,6 +7,7 @@ import br.com.saude_monitor.api.feedback.dto.FeedbackResponse;
 import br.com.saude_monitor.api.feedback.service.FeedbackService;
 import br.com.saude_monitor.api.hospital.dto.PageResponse;
 import br.com.saude_monitor.api.user.document.UserDocument;
+import br.com.saude_monitor.api.user.dto.FinalidadeResponse;
 import br.com.saude_monitor.api.user.service.UsuarioConsulta;
 import br.com.saude_monitor.api.user.service.ExportacaoPdfService;
 import br.com.saude_monitor.api.user.service.UserService;
@@ -57,11 +58,11 @@ class ContaControllerTest {
                 String usuarioId, br.com.saude_monitor.api.user.dto.AtualizarConsentimentosRequest request) {
             var agora = java.time.Instant.parse("2026-09-01T12:00:00Z");
             return new br.com.saude_monitor.api.user.dto.ConsentimentosResponse(
-                    new br.com.saude_monitor.api.user.dto.ConsentimentosResponse.Finalidade(
-                            Boolean.TRUE.equals(request.localizacao()), agora, "1.0"),
-                    new br.com.saude_monitor.api.user.dto.ConsentimentosResponse.Finalidade(
-                            Boolean.TRUE.equals(request.notificacoes()), agora, "1.0"),
-                    new br.com.saude_monitor.api.user.dto.ConsentimentosResponse.Finalidade(true, agora, "1.0"));
+                    FinalidadeResponse.builder()
+                            .aceito(Boolean.TRUE.equals(request.localizacao())).data(agora).versao("1.0").build(),
+                    FinalidadeResponse.builder()
+                            .aceito(Boolean.TRUE.equals(request.notificacoes())).data(agora).versao("1.0").build(),
+                    FinalidadeResponse.builder().aceito(true).data(agora).versao("1.0").build());
         }
 
         @Override
