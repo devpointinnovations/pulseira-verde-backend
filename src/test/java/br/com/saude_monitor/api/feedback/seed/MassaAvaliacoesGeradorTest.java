@@ -5,12 +5,9 @@ import br.com.saude_monitor.api.feedback.document.FezTriagem;
 import br.com.saude_monitor.api.feedback.document.FoiAtendido;
 import br.com.saude_monitor.api.feedback.document.MedicacaoReceita;
 import br.com.saude_monitor.api.feedback.document.TeveMedico;
-import br.com.saude_monitor.api.feedback.seed.MassaAvaliacoesGerador.Perfil;
 import br.com.saude_monitor.api.hospital.document.CategoriaEstabelecimento;
-import br.com.saude_monitor.api.hospital.document.HospitalDocument;
-import br.com.saude_monitor.api.visita.document.StatusVisita;
-import br.com.saude_monitor.api.visita.document.TipoPermanencia;
-import br.com.saude_monitor.api.visita.document.VisitaDocument;
+import br.com.saude_monitor.api.hospital.dto.HospitalParaMassa;
+import br.com.saude_monitor.api.visita.dto.VisitaDeMassa;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
@@ -31,27 +28,26 @@ class MassaAvaliacoesGeradorTest {
             .mapToObj(i -> "usuario-" + i).toList();
 
     /** 200 hospitais: 20 HOSPITAL, 30 UPA, 150 UBS — a maioria é UBS, como na base real. */
-    private static List<HospitalDocument> hospitais() {
+    private static List<HospitalParaMassa> hospitais() {
         return IntStream.range(0, 200)
-                .mapToObj(i -> HospitalDocument.builder()
+                .mapToObj(i -> HospitalParaMassa.builder()
                         .id("h-%03d".formatted(i))
-                        .categoria(i < 20 ? CategoriaEstabelecimento.HOSPITAL
+                        .categoria((i < 20 ? CategoriaEstabelecimento.HOSPITAL
                                 : i < 50 ? CategoriaEstabelecimento.UPA
-                                : CategoriaEstabelecimento.UBS)
-                        .ativo(true)
+                                : CategoriaEstabelecimento.UBS).ordinal())
                         .build())
                 .toList();
     }
 
-    private static MassaAvaliacoesGerador.Massa gerar() {
+    private static MassaGerada gerar() {
         return new MassaAvaliacoesGerador(MassaAvaliacoesRunner.SEMENTE, AGORA).gerar(hospitais(), USUARIOS);
     }
 
     @Test
     void distribuiOsPerfisNasQuantidadesDefinidasEDeixaORestoSemAvaliacao() {
-        MassaAvaliacoesGerador.Massa massa = gerar();
+        MassaGerada massa = gerar();
 
-        Map<Perfil, Long> porPerfil = massa.perfilPorHospital().values().stream()
+        Map<PerfilDoHospital, Long> porPerfil = massa.perfilPorHospital().values().stream()
                 .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()));
         MassaAvaliacoesGerador.HOSPITAIS_POR_PERFIL.forEach((perfil, quantidade) ->
                 assertThat(porPerfil.get(perfil)).as(perfil.name()).isEqualTo(quantidade.longValue()));
@@ -63,33 +59,34 @@ class MassaAvaliacoesGeradorTest {
 
     @Test
     void intercalaCategoriasParaORankingNaoFicarSoComUbs() {
-        Map<String, CategoriaEstabelecimento> categoria = hospitais().stream()
-                .collect(Collectors.toMap(HospitalDocument::getId, HospitalDocument::getCategoria));
+        Map<String, Integer> categoria = hospitais().stream()
+                .collect(Collectors.toMap(HospitalParaMassa::id, HospitalParaMassa::categoria));
 
-        Set<CategoriaEstabelecimento> categorias = gerar().perfilPorHospital().keySet().stream()
+        Set<Integer> categorias = gerar().perfilPorHospital().keySet().stream()
                 .map(categoria::get).collect(Collectors.toSet());
 
         assertThat(categorias).containsExactlyInAnyOrder(
-                CategoriaEstabelecimento.HOSPITAL, CategoriaEstabelecimento.UPA, CategoriaEstabelecimento.UBS);
+                CategoriaEstabelecimento.HOSPITAL.ordinal(), CategoriaEstabelecimento.UPA.ordinal(),
+                CategoriaEstabelecimento.UBS.ordinal());
     }
 
     @Test
     void perfisProduzemMediasOrdenadasEPoucasAvaliacoesFicaAbaixoDoMinimo() {
-        MassaAvaliacoesGerador.Massa massa = gerar();
+        MassaGerada massa = gerar();
         Map<String, List<FeedbackDocument>> porHospital = massa.feedbacks().stream()
                 .collect(Collectors.groupingBy(FeedbackDocument::getHospitalId));
 
-        Map<Perfil, Double> mediaPorPerfil = massa.perfilPorHospital().entrySet().stream()
+        Map<PerfilDoHospital, Double> mediaPorPerfil = massa.perfilPorHospital().entrySet().stream()
                 .collect(Collectors.groupingBy(Map.Entry::getValue, Collectors.averagingDouble(e ->
                         porHospital.get(e.getKey()).stream().mapToInt(FeedbackDocument::getNota).average().orElseThrow())));
 
-        assertThat(mediaPorPerfil.get(Perfil.EXCELENTE)).isGreaterThan(mediaPorPerfil.get(Perfil.BOM));
-        assertThat(mediaPorPerfil.get(Perfil.BOM)).isGreaterThan(mediaPorPerfil.get(Perfil.REGULAR));
-        assertThat(mediaPorPerfil.get(Perfil.REGULAR)).isGreaterThan(mediaPorPerfil.get(Perfil.RUIM));
+        assertThat(mediaPorPerfil.get(PerfilDoHospital.EXCELENTE)).isGreaterThan(mediaPorPerfil.get(PerfilDoHospital.BOM));
+        assertThat(mediaPorPerfil.get(PerfilDoHospital.BOM)).isGreaterThan(mediaPorPerfil.get(PerfilDoHospital.REGULAR));
+        assertThat(mediaPorPerfil.get(PerfilDoHospital.REGULAR)).isGreaterThan(mediaPorPerfil.get(PerfilDoHospital.RUIM));
 
         massa.perfilPorHospital().forEach((hospitalId, perfil) -> {
             int avaliacoes = porHospital.get(hospitalId).size();
-            if (perfil == Perfil.POUCAS_AVALIACOES) {
+            if (perfil == PerfilDoHospital.POUCAS_AVALIACOES) {
                 assertThat(avaliacoes).as(hospitalId).isBetween(1, 4); // RN-15: indicadores indisponíveis
             } else {
                 assertThat(avaliacoes).as(hospitalId).isGreaterThanOrEqualTo(5);
@@ -140,40 +137,40 @@ class MassaAvaliacoesGeradorTest {
 
     @Test
     void cadaAvaliacaoApontaParaUmaVisitaFinalizadaDoMesmoHospitalEDono() {
-        MassaAvaliacoesGerador.Massa massa = gerar();
-        Map<String, VisitaDocument> visitas = massa.visitas().stream()
-                .collect(Collectors.toMap(VisitaDocument::getId, Function.identity()));
+        MassaGerada massa = gerar();
+        Map<String, VisitaDeMassa> visitas = massa.visitas().stream()
+                .collect(Collectors.toMap(VisitaDeMassa::id, Function.identity()));
 
         assertThat(massa.feedbacks()).extracting(FeedbackDocument::getVisitaId).doesNotHaveDuplicates();
         for (FeedbackDocument f : massa.feedbacks()) {
-            VisitaDocument v = visitas.get(f.getVisitaId());
+            VisitaDeMassa v = visitas.get(f.getVisitaId());
             assertThat(v).isNotNull();
-            assertThat(v.getStatus()).isEqualTo(StatusVisita.FINALIZADA);
-            assertThat(v.getHospitalId()).isEqualTo(f.getHospitalId());
-            assertThat(v.getUsuarioId()).isEqualTo(f.getUsuarioId());
-            assertThat(f.getCriadoEm()).isAfter(v.getSaida()).isBeforeOrEqualTo(AGORA);
+            assertThat(v.status()).isEqualTo("FINALIZADA");
+            assertThat(v.hospitalId()).isEqualTo(f.getHospitalId());
+            assertThat(v.usuarioId()).isEqualTo(f.getUsuarioId());
+            assertThat(f.getCriadoEm()).isAfter(v.saida()).isBeforeOrEqualTo(AGORA);
         }
-        assertThat(massa.visitas()).anyMatch(v -> v.getStatus() == StatusVisita.SEM_FEEDBACK);
-        assertThat(massa.visitas()).anyMatch(v -> v.getTipoPermanencia() != TipoPermanencia.ATENDIMENTO);
+        assertThat(massa.visitas()).anyMatch(v -> "SEM_FEEDBACK".equals(v.status()));
+        assertThat(massa.visitas()).anyMatch(v -> !"ATENDIMENTO".equals(v.tipoPermanencia()));
     }
 
     @Test
     void visitasFicamNaJanelaDosIndicadoresComDuracaoCoerente() {
         Instant inicioJanela = AGORA.minus(Duration.ofDays(90));
-        for (VisitaDocument v : gerar().visitas()) {
-            assertThat(v.getId()).startsWith(MassaAvaliacoesGerador.PREFIXO_ID);
-            assertThat(v.getEntrada()).isAfter(inicioJanela);
-            assertThat(v.getSaida()).isBefore(AGORA);
-            assertThat(Duration.between(v.getEntrada(), v.getSaida()).toMinutes()).isEqualTo(v.getDuracaoMinutos().longValue());
-            assertThat(v.getDuracaoMinutos()).isBetween(2, 24 * 60);
-            assertThat(v.getUsuarioId() == null).isEqualTo(v.getDispositivoId() != null);
+        for (VisitaDeMassa v : gerar().visitas()) {
+            assertThat(v.id()).startsWith(MassaAvaliacoesGerador.PREFIXO_ID);
+            assertThat(v.entrada()).isAfter(inicioJanela);
+            assertThat(v.saida()).isBefore(AGORA);
+            assertThat(Duration.between(v.entrada(), v.saida()).toMinutes()).isEqualTo((long) v.duracaoMinutos());
+            assertThat(v.duracaoMinutos()).isBetween(2, 24 * 60);
+            assertThat(v.usuarioId() == null).isEqualTo(v.dispositivoId() != null);
         }
     }
 
     @Test
     void mesmaSementeGeraAMesmaMassa() {
-        MassaAvaliacoesGerador.Massa a = gerar();
-        MassaAvaliacoesGerador.Massa b = gerar();
+        MassaGerada a = gerar();
+        MassaGerada b = gerar();
 
         assertThat(a.perfilPorHospital()).isEqualTo(b.perfilPorHospital());
         assertThat(a.feedbacks()).extracting(FeedbackDocument::getNota)
@@ -182,16 +179,16 @@ class MassaAvaliacoesGeradorTest {
 
     @Test
     void semUsuariosTodasAsAvaliacoesSaoAnonimas() {
-        MassaAvaliacoesGerador.Massa massa = new MassaAvaliacoesGerador(1L, AGORA).gerar(hospitais(), List.of());
+        MassaGerada massa = new MassaAvaliacoesGerador(1L, AGORA).gerar(hospitais(), List.of());
 
         assertThat(massa.feedbacks()).isNotEmpty().allMatch(FeedbackDocument::isAnonimizado);
     }
 
     @Test
     void basePequenaUsaTodosOsHospitaisDisponiveis() {
-        List<HospitalDocument> poucos = hospitais().subList(0, 3);
+        List<HospitalParaMassa> poucos = hospitais().subList(0, 3);
 
-        MassaAvaliacoesGerador.Massa massa = new MassaAvaliacoesGerador(1L, AGORA).gerar(poucos, USUARIOS);
+        MassaGerada massa = new MassaAvaliacoesGerador(1L, AGORA).gerar(poucos, USUARIOS);
 
         assertThat(massa.perfilPorHospital()).hasSize(3);
     }
