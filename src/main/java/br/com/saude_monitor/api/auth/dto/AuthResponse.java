@@ -1,5 +1,7 @@
 package br.com.saude_monitor.api.auth.dto;
 
+import lombok.Builder;
+
 /**
  * Resposta de autenticação (login e refresh) — JWT (F0-01).
  *
@@ -11,6 +13,7 @@ package br.com.saude_monitor.api.auth.dto;
  *   <li>{@code usuario} — dados resumidos do usuário autenticado.</li>
  * </ul>
  */
+@Builder
 public record AuthResponse(
         String accessToken,
         String refreshToken,

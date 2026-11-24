@@ -48,8 +48,19 @@ class CatalogoServiceTest {
     private final CatalogoService service = new CatalogoService(hospitalService, clock);
 
     private static HospitalResumoResponse criarItem(String id, String nome) {
-        return new HospitalResumoResponse(id, nome, TipoEstabelecimento.PUBLICO, null, null,
-                null, null, 150, true, null, null);
+        return HospitalResumoResponse.builder()
+                .id(id)
+                .nome(nome)
+                .tipo(TipoEstabelecimento.PUBLICO)
+                .categoria(null)
+                .tipoUnidade(null)
+                .endereco(null)
+                .localizacao(null)
+                .raioMetros(150)
+                .ativo(true)
+                .regiaoAdministrativa(null)
+                .indicadores(null)
+                .build();
     }
 
     private static HospitalResumoResponse criarItem(String id) {
@@ -60,7 +71,13 @@ class CatalogoServiceTest {
         Map<String, IndicadoresResponse> porHospital = new LinkedHashMap<>();
         porHospital.put(id, nota == null
                 ? IndicadoresResponse.indisponivel()
-                : new IndicadoresResponse(true, nota, 8, 30, null));
+                : IndicadoresResponse.builder()
+                        .indicadoresDisponiveis(true)
+                        .notaMedia(nota)
+                        .nAvaliacoes(8)
+                        .tempoMedianoMinutos(30)
+                        .atualizadoEm(null)
+                        .build());
         return porHospital;
     }
 

@@ -95,17 +95,17 @@ public class UserServiceImpl implements UserService {
         // (AuthServiceImpl.login()).
         envioDeConfirmacaoDeEmail.enviarCodigoConfirmacaoEmail(normalizedEmail);
 
-        return new UserResponse(
-                true,
-                "Usuário cadastrado com sucesso",
-                user.getId(),
-                user.getFullName(),
-                user.getEmail(),
-                user.getPhone(),
-                user.isActive(),
-                user.getCreatedAt(),
-                user.getUpdatedAt()
-        );
+        return UserResponse.builder()
+                .success(true)
+                .message("Usuário cadastrado com sucesso")
+                .id(user.getId())
+                .fullName(user.getFullName())
+                .email(user.getEmail())
+                .phone(user.getPhone())
+                .active(user.isActive())
+                .createdAt(user.getCreatedAt())
+                .updatedAt(user.getUpdatedAt())
+                .build();
     }
 
     @Override

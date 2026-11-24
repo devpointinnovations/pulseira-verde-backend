@@ -33,14 +33,14 @@ public class RestAuthenticationEntryPoint implements AuthenticationEntryPoint {
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding("UTF-8");
 
-        ApiError body = new ApiError(
-                Instant.now(),
-                HttpServletResponse.SC_UNAUTHORIZED,
-                "NAO_AUTORIZADO",
-                "Token ausente, inválido ou expirado.",
-                List.<CampoInvalido>of(),
-                UUID.randomUUID().toString().replace("-", "")
-        );
+        ApiError body = ApiError.builder()
+                .timestamp(Instant.now())
+                .status(HttpServletResponse.SC_UNAUTHORIZED)
+                .code("NAO_AUTORIZADO")
+                .message("Token ausente, inválido ou expirado.")
+                .details(List.<CampoInvalido>of())
+                .traceId(UUID.randomUUID().toString().replace("-", ""))
+                .build();
         objectMapper.writeValue(response.getOutputStream(), body);
     }
 }

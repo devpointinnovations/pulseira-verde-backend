@@ -117,14 +117,14 @@ public class GlobalExceptionHandler {
 
     private ResponseEntity<ApiError> build(HttpStatus status, String code, String message,
                                            List<CampoInvalido> details) {
-        ApiError body = new ApiError(
-                Instant.now(),
-                status.value(),
-                code,
-                message,
-                details,
-                UUID.randomUUID().toString().replace("-", "")
-        );
+        ApiError body = ApiError.builder()
+                .timestamp(Instant.now())
+                .status(status.value())
+                .code(code)
+                .message(message)
+                .details(details)
+                .traceId(UUID.randomUUID().toString().replace("-", ""))
+                .build();
         return ResponseEntity.status(status).body(body);
     }
 }

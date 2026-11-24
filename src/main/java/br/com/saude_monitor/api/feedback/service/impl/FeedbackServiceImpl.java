@@ -210,9 +210,13 @@ public class FeedbackServiceImpl implements FeedbackService {
                 .map(VisitaParaFeedback::hospitalId).toList());
 
         return semFeedback.stream()
-                .map(v -> new FeedbackPendenteResponse(
-                        v.id(), v.hospitalId(), nomes.get(v.hospitalId()),
-                        v.saida(), v.saida().plus(JANELA_RESPOSTA)))
+                .map(v -> FeedbackPendenteResponse.builder()
+                        .visitaId(v.id())
+                        .hospitalId(v.hospitalId())
+                        .hospitalNome(nomes.get(v.hospitalId()))
+                        .saida(v.saida())
+                        .prazo(v.saida().plus(JANELA_RESPOSTA))
+                        .build())
                 .toList();
     }
 
@@ -353,10 +357,24 @@ public class FeedbackServiceImpl implements FeedbackService {
     }
 
     private FeedbackResponse toResponse(FeedbackDocument f, String hospitalNome) {
-        return new FeedbackResponse(
-                f.getId(), f.getVisitaId(), f.getHospitalId(), hospitalNome,
-                f.getFoiAtendido(), f.getMotivoNaoAtendido(), f.getTeveMedico(), f.getFezTriagem(),
-                f.getMedicacaoReceita(), f.getEspecialidadeProcurada(), f.getNota(), f.getTratamentoEquipe(),
-                f.getComentario(), f.isAnonimizado(), f.getCriadoEm(), calcularEditavelAte(f), true);
+        return FeedbackResponse.builder()
+                .id(f.getId())
+                .visitaId(f.getVisitaId())
+                .hospitalId(f.getHospitalId())
+                .hospitalNome(hospitalNome)
+                .foiAtendido(f.getFoiAtendido())
+                .motivoNaoAtendido(f.getMotivoNaoAtendido())
+                .teveMedico(f.getTeveMedico())
+                .fezTriagem(f.getFezTriagem())
+                .medicacaoReceita(f.getMedicacaoReceita())
+                .especialidadeProcurada(f.getEspecialidadeProcurada())
+                .nota(f.getNota())
+                .tratamentoEquipe(f.getTratamentoEquipe())
+                .comentario(f.getComentario())
+                .anonimizado(f.isAnonimizado())
+                .criadoEm(f.getCriadoEm())
+                .editavelAte(calcularEditavelAte(f))
+                .recebido(true)
+                .build();
     }
 }

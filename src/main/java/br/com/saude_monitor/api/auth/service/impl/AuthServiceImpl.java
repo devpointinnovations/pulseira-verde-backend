@@ -419,16 +419,21 @@ public class AuthServiceImpl implements AuthService {
     }
 
     private AuthResponse emitirTokens(UsuarioAutenticavel user) {
-        return new AuthResponse(
-                jwtService.generateAccessToken(user),
-                jwtService.generateRefreshToken(user),
-                jwtService.accessExpirationSeconds(),
-                toUsuarioDto(user)
-        );
+        return AuthResponse.builder()
+                .accessToken(jwtService.generateAccessToken(user))
+                .refreshToken(jwtService.generateRefreshToken(user))
+                .expiraEm(jwtService.accessExpirationSeconds())
+                .usuario(toUsuarioDto(user))
+                .build();
     }
 
     private UsuarioDto toUsuarioDto(UsuarioAutenticavel user) {
-        return new UsuarioDto(user.id(), user.nomeCompleto(), user.email(), user.papel());
+        return UsuarioDto.builder()
+                .id(user.id())
+                .nome(user.nomeCompleto())
+                .email(user.email())
+                .papel(user.papel())
+                .build();
     }
 
     private String normalizeEmail(String email) {

@@ -212,10 +212,26 @@ class HospitalControllerTest {
 
         @Override
         public HospitalResponse criar(HospitalRequest request) {
-            return new HospitalResponse("1", request.nome(), request.cnpj(), request.tipo(),
-                    request.categoria(), null, null, null, null, null,
-                    request.endereco(), request.contato(), request.geofence(),
-                    true, null, IndicadoresResponse.indisponivel(), Instant.now(), Instant.now());
+            return HospitalResponse.builder()
+                    .id("1")
+                    .nome(request.nome())
+                    .cnpj(request.cnpj())
+                    .tipo(request.tipo())
+                    .categoria(request.categoria())
+                    .horarioFuncionamento(null)
+                    .salaVacina(null)
+                    .farmacia(null)
+                    .coletaMaterial(null)
+                    .tipoUnidade(null)
+                    .endereco(request.endereco())
+                    .contato(request.contato())
+                    .geofence(request.geofence())
+                    .ativo(true)
+                    .regiaoAdministrativa(null)
+                    .indicadores(IndicadoresResponse.indisponivel())
+                    .criadoEm(Instant.now())
+                    .atualizadoEm(Instant.now())
+                    .build();
         }
 
         @Override
@@ -268,9 +284,14 @@ class HospitalControllerTest {
 
         @Override
         public SugestaoHospitalResponse sugerir(SugestaoHospitalRequest request) {
-            return new SugestaoHospitalResponse(
-                    "1", request.nome(), request.endereco(), request.observacao(),
-                    StatusSugestao.PENDENTE, Instant.now());
+            return SugestaoHospitalResponse.builder()
+                    .id("1")
+                    .nome(request.nome())
+                    .endereco(request.endereco())
+                    .observacao(request.observacao())
+                    .status(StatusSugestao.PENDENTE)
+                    .criadoEm(Instant.now())
+                    .build();
         }
 
         @Override

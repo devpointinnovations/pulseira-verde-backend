@@ -61,7 +61,11 @@ public class CatalogoService {
     public CatalogoResponse obterCatalogo() {
         return catalogo.obterOuMontar(clock, () -> {
             List<HospitalResumoResponse> itens = hospitalService.listarCatalogo();
-            return new CatalogoResponse(calcularVersao(itens), itens.size(), itens);
+            return CatalogoResponse.builder()
+                    .versao(calcularVersao(itens))
+                    .total(itens.size())
+                    .estabelecimentos(itens)
+                    .build();
         });
     }
 

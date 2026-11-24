@@ -2,6 +2,7 @@ package br.com.saude_monitor.api.hospital.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
+import lombok.Builder;
 
 /**
  * Endereço do estabelecimento (entrada e saída da API).
@@ -9,6 +10,7 @@ import jakarta.validation.constraints.Size;
  * <p>Reutilizado tanto no request (cadastro/edição) quanto no response, já que
  * as anotações de validação não interferem na serialização de saída.</p>
  */
+@Builder
 public record EnderecoDto(
         @NotBlank(message = "logradouro é obrigatório")
         @Size(max = 300, message = "logradouro deve ter no máximo 300 caracteres")

@@ -31,14 +31,14 @@ final class RespostaIndisponivel {
         response.setHeader(HttpHeaders.RETRY_AFTER, String.valueOf(retryAfterSegundos));
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding("UTF-8");
-        ApiError body = new ApiError(
-                Instant.now(),
-                STATUS,
-                codigo,
-                mensagem,
-                List.<CampoInvalido>of(),
-                UUID.randomUUID().toString().replace("-", "")
-        );
+        ApiError body = ApiError.builder()
+                .timestamp(Instant.now())
+                .status(STATUS)
+                .code(codigo)
+                .message(mensagem)
+                .details(List.<CampoInvalido>of())
+                .traceId(UUID.randomUUID().toString().replace("-", ""))
+                .build();
         objectMapper.writeValue(response.getOutputStream(), body);
     }
 }
