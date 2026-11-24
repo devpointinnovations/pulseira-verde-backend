@@ -3,6 +3,8 @@ package br.com.saude_monitor.api.visita.service;
 import br.com.saude_monitor.api.visita.document.StatusVisita;
 import br.com.saude_monitor.api.visita.document.TipoPermanencia;
 import br.com.saude_monitor.api.visita.document.VisitaDocument;
+import br.com.saude_monitor.api.visita.dto.VisitaParaAvaliacao;
+import br.com.saude_monitor.api.visita.dto.VisitaParaFeedback;
 import br.com.saude_monitor.api.visita.dto.VisitaParaIndicador;
 import br.com.saude_monitor.api.visita.repository.VisitaRepository;
 import lombok.RequiredArgsConstructor;
@@ -29,6 +31,56 @@ public class VisitaConsulta {
     private final MongoTemplate mongoTemplate;
 
     /** Status das visitas que entram no indicador de tempo: FINALIZADA (RN-03) e GPS_INTERROMPIDO (RN-06). */
+    /** Status da visita que já aceita feedback: encerrada, FINALIZADA ou GPS_INTERROMPIDO. */
+    private static final List<StatusVisita> STATUS_AVALIAVEIS = List.of(StatusVisita.FINALIZADA, StatusVisita.GPS_INTERROMPIDO);
+
+    /**
+     * A visita como o envio de feedback a enxerga: se quem chama é o dono (SEG-02) e se já está
+     * encerrada. Vazio quando a visita não existe.
+     */
+    public Optional<VisitaParaAvaliacao> paraAvaliacao(String visitaId, String usuarioId, String dispositivoId) {
+        return visitaRepository.findById(visitaId)
+                .map(v -> VisitaParaAvaliacao.builder()
+                        .id(v.getId())
+                        .hospitalId(v.getHospitalId())
+                        .saida(v.getSaida())
+                        .avaliavel(STATUS_AVALIAVEIS.contains(v.getStatus()))
+                        .dono(VisitaDono.isDonoDaVisita(v, usuarioId, dispositivoId))
+                        .build());
+    }
+
+    /** Visitas da pessoa encerradas desde o instante, da mais recente para a mais antiga. */
+    public List<VisitaParaFeedback> avaliaveisDoUsuarioDesde(String usuarioId, Instant desde) {
+        return visitaRepository.findByUsuarioIdAndStatusInAndSaidaAfterOrderBySaidaDesc(usuarioId, STATUS_AVALIAVEIS, desde)
+                .stream()
+                .map(v -> VisitaParaFeedback.builder()
+                        .id(v.getId())
+                        .hospitalId(v.getHospitalId())
+                        .saida(v.getSaida())
+                        .duracaoMinutos(v.getDuracaoMinutos())
+                        .build())
+                .toList();
+    }
+
+    /** Ids das visitas FINALIZADA com saída antes do instante (a janela de feedback já fechou). */
+    public List<String> idsFinalizadasAntesDe(Instant limite) {
+        return visitaRepository.findByStatusAndSaidaBefore(StatusVisita.FINALIZADA, limite).stream()
+                .map(VisitaDocument::getId)
+                .toList();
+    }
+
+    /**
+     * Marca como SEM_FEEDBACK as visitas informadas que ainda estão FINALIZADA. Atualiza só o status, em vez
+     * de regravar a visita lida: regravar podia devolver conta, aparelho ou pontos de GPS apagados no meio
+     * do caminho pela retenção (DAD-01).
+     */
+    public void marcarSemFeedback(Collection<String> visitaIds) {
+        mongoTemplate.updateMulti(
+                new Query(Criteria.where("_id").in(visitaIds).and("status").is(StatusVisita.FINALIZADA)),
+                new Update().set("status", StatusVisita.SEM_FEEDBACK),
+                VisitaDocument.class);
+    }
+
     private static final List<StatusVisita> STATUS_TEMPO = List.of(StatusVisita.FINALIZADA, StatusVisita.GPS_INTERROMPIDO);
 
     /**
@@ -101,16 +153,4 @@ public class VisitaConsulta {
         return Query.query(Criteria.where("usuarioId").is(usuarioId));
     }
 
-    public Optional<VisitaDocument> findById(String id) {
-        return visitaRepository.findById(id);
-    }
-
-    public List<VisitaDocument> findByUsuarioIdAndStatusInAndSaidaAfterOrderBySaidaDesc(
-            String usuarioId, List<StatusVisita> status, Instant limite) {
-        return visitaRepository.findByUsuarioIdAndStatusInAndSaidaAfterOrderBySaidaDesc(usuarioId, status, limite);
-    }
-
-    public List<VisitaDocument> findByStatusAndSaidaBefore(StatusVisita status, Instant limite) {
-        return visitaRepository.findByStatusAndSaidaBefore(status, limite);
-    }
 }
