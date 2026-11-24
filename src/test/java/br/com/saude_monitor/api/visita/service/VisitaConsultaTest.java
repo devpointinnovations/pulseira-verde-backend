@@ -94,6 +94,28 @@ class VisitaConsultaTest {
     }
 
     @Test
+    void paraAvaliacaoDeVisitaAnonimaSoVaiParaOAparelhoDono() {
+        when(repository.findById("v1")).thenReturn(Optional.of(VisitaDocument.builder().id("v1")
+                .dispositivoId("anon-1").status(StatusVisita.FINALIZADA).build()));
+
+        assertEquals(true, consulta.paraAvaliacao("v1", null, "anon-1").orElseThrow().dono());
+        assertEquals(false, consulta.paraAvaliacao("v1", null, "anon-2").orElseThrow().dono());
+        assertEquals(false, consulta.paraAvaliacao("v1", null, null).orElseThrow().dono());
+        assertEquals(false, consulta.paraAvaliacao("v1", "u1", null).orElseThrow().dono());
+    }
+
+    @Test
+    void paraAvaliacaoTrataGpsInterrompidoComoVisitaEncerrada() {
+        when(repository.findById("v1")).thenReturn(Optional.of(VisitaDocument.builder().id("v1")
+                .usuarioId("u1").status(StatusVisita.GPS_INTERROMPIDO).build()));
+        when(repository.findById("v2")).thenReturn(Optional.of(VisitaDocument.builder().id("v2")
+                .usuarioId("u1").status(StatusVisita.SUSPEITA).build()));
+
+        assertEquals(true, consulta.paraAvaliacao("v1", "u1", null).orElseThrow().avaliavel());
+        assertEquals(false, consulta.paraAvaliacao("v2", "u1", null).orElseThrow().avaliavel());
+    }
+
+    @Test
     void avaliaveisDoUsuarioDesdePedeSoFinalizadaEGpsInterrompidoEConverteOsCampos() {
         when(repository.findByUsuarioIdAndStatusInAndSaidaAfterOrderBySaidaDesc("u1",
                 List.of(StatusVisita.FINALIZADA, StatusVisita.GPS_INTERROMPIDO), T0))

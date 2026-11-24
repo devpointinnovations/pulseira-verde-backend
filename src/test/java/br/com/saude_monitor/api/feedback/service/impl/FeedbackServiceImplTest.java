@@ -117,6 +117,17 @@ class FeedbackServiceImplTest {
     }
 
     @Test
+    void processarSemRespostaNaoAtualizaNadaQuandoTodasAsVisitasJaTemFeedback() {
+        when(visitaRepository.findByStatusAndSaidaBefore(any(), any())).thenReturn(List.of(visitaFinalizada("v1")));
+        when(feedbackRepository.findByVisitaIdIn(any()))
+                .thenReturn(List.of(FeedbackDocument.builder().visitaId("v1").build()));
+
+        service.processarSemResposta();
+
+        verify(mongoTemplate, never()).updateMulti(any(org.springframework.data.mongodb.core.query.Query.class), any(), any(Class.class));
+    }
+
+    @Test
     void processarSemRespostaSemCandidatosNaoChamaFeedbackRepository() {
         service.processarSemResposta();
 
