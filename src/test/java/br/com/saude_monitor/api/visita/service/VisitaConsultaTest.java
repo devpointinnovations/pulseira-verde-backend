@@ -3,6 +3,7 @@ package br.com.saude_monitor.api.visita.service;
 import br.com.saude_monitor.api.visita.document.StatusVisita;
 import br.com.saude_monitor.api.visita.document.TipoPermanencia;
 import br.com.saude_monitor.api.visita.document.VisitaDocument;
+import br.com.saude_monitor.api.visita.dto.VisitaParaIndicador;
 import br.com.saude_monitor.api.visita.repository.VisitaRepository;
 import org.bson.Document;
 import org.junit.jupiter.api.Test;
@@ -14,6 +15,7 @@ import org.springframework.data.mongodb.core.query.UpdateDefinition;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -74,12 +76,10 @@ class VisitaConsultaTest {
     }
 
     @Test
-    void findByIdEFindAllByIdDelegamAoRepository() {
+    void findByIdDelegaAoRepository() {
         when(repository.findById("v1")).thenReturn(Optional.of(visita));
-        when(repository.findAllById(List.of("v1"))).thenReturn(List.of(visita));
 
         assertEquals(Optional.of(visita), consulta.findById("v1"));
-        assertEquals(List.of(visita), consulta.findAllById(List.of("v1")));
     }
 
     @Test
@@ -88,21 +88,61 @@ class VisitaConsultaTest {
         when(repository.findByUsuarioIdAndStatusInAndSaidaAfterOrderBySaidaDesc("u1", status, T0))
                 .thenReturn(List.of(visita));
         when(repository.findByStatusAndSaidaBefore(StatusVisita.FINALIZADA, T1)).thenReturn(List.of(visita));
-        when(repository.findByStatusInAndProcessadoEmAfter(status, T0)).thenReturn(List.of(visita));
 
         assertEquals(List.of(visita),
                 consulta.findByUsuarioIdAndStatusInAndSaidaAfterOrderBySaidaDesc("u1", status, T0));
         assertEquals(List.of(visita), consulta.findByStatusAndSaidaBefore(StatusVisita.FINALIZADA, T1));
-        assertEquals(List.of(visita), consulta.findByStatusInAndProcessadoEmAfter(status, T0));
     }
 
     @Test
-    void consultaPorHospitalEPeriodoRepassaTodosOsArgumentos() {
-        List<StatusVisita> status = List.of(StatusVisita.FINALIZADA);
-        when(repository.findByHospitalIdAndStatusInAndSaidaBetweenAndTipoPermanencia(
-                "h1", status, T0, T1, TipoPermanencia.ATENDIMENTO)).thenReturn(List.of(visita));
+    void paraIndicadorDeTempoPedeSoFinalizadaEGpsInterrompidoDeAtendimentoEConverteOsCampos() {
+        VisitaDocument comprovada = VisitaDocument.builder().id("v2").status(StatusVisita.FINALIZADA)
+                .duracaoMinutos(30).entrada(T0).saida(T1).presencaComprovada(true).build();
+        VisitaDocument semProva = VisitaDocument.builder().id("v3").status(StatusVisita.GPS_INTERROMPIDO)
+                .duracaoMinutos(10).entrada(T0).saida(T1).ultimaPosicaoEm(T1).presencaComprovada(false).build();
+        when(repository.findByHospitalIdAndStatusInAndSaidaBetweenAndTipoPermanencia("h1",
+                List.of(StatusVisita.FINALIZADA, StatusVisita.GPS_INTERROMPIDO), T0, T1, TipoPermanencia.ATENDIMENTO))
+                .thenReturn(List.of(comprovada, semProva));
 
-        assertEquals(List.of(visita), consulta.findByHospitalIdAndStatusInAndSaidaBetweenAndTipoPermanencia(
-                "h1", status, T0, T1, TipoPermanencia.ATENDIMENTO));
+        assertEquals(
+                List.of(VisitaParaIndicador.builder()
+                        .duracaoMinutos(30)
+                        .comprovada(true)
+                        .finalizada(true)
+                        .gpsInterrompido(false)
+                        .entrada(T0)
+                        .saida(T1)
+                        .ultimaPosicaoEm(null)
+                        .build(),
+                        VisitaParaIndicador.builder()
+                                .duracaoMinutos(10)
+                                .comprovada(false)
+                                .finalizada(false)
+                                .gpsInterrompido(true)
+                                .entrada(T0)
+                                .saida(T1)
+                                .ultimaPosicaoEm(T1)
+                                .build()),
+                consulta.paraIndicadorDeTempo("h1", T0, T1));
+    }
+
+    @Test
+    void comPresencaComprovadaDevolveSoOsIdsComProva() {
+        when(repository.findAllById(List.of("v1", "v2"))).thenReturn(List.of(
+                VisitaDocument.builder().id("v1").presencaComprovada(true).build(),
+                VisitaDocument.builder().id("v2").presencaComprovada(false).build()));
+
+        assertEquals(Set.of("v1"), consulta.comPresencaComprovada(List.of("v1", "v2")));
+    }
+
+    @Test
+    void hospitaisComVisitaProcessadaDesdeUsaOsStatusDoIndicadorDeTempo() {
+        when(repository.findByStatusInAndProcessadoEmAfter(
+                List.of(StatusVisita.FINALIZADA, StatusVisita.GPS_INTERROMPIDO), T0))
+                .thenReturn(List.of(VisitaDocument.builder().hospitalId("h1").build(),
+                        VisitaDocument.builder().hospitalId("h1").build(),
+                        VisitaDocument.builder().hospitalId("h2").build()));
+
+        assertEquals(Set.of("h1", "h2"), consulta.hospitaisComVisitaProcessadaDesde(T0));
     }
 }

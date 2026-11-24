@@ -5,7 +5,8 @@ import br.com.saude_monitor.api.config.exception.ConflitoException;
 import br.com.saude_monitor.api.config.exception.NaoAutorizadoException;
 import br.com.saude_monitor.api.config.exception.RecursoNaoEncontradoException;
 import br.com.saude_monitor.api.config.exception.ValidacaoNegocioException;
-import br.com.saude_monitor.api.hospital.document.HospitalDocument;
+import br.com.saude_monitor.api.hospital.dto.HospitalNoPonto;
+import br.com.saude_monitor.api.hospital.dto.HospitalParaVisita;
 import br.com.saude_monitor.api.hospital.dto.PageResponse;
 import br.com.saude_monitor.api.hospital.service.HospitalConsulta;
 import br.com.saude_monitor.api.visita.document.OrigemVisita;
@@ -465,38 +466,37 @@ public class VisitaServiceImpl implements VisitaService {
         }
         GeoJsonPoint ponto = new GeoJsonPoint(posicao.coordinates().getFirst(), posicao.coordinates().get(1));
 
-        Query query = new Query(Criteria.where("ativo").is(true).and("geofence").intersects(ponto));
-        List<HospitalDocument> candidatos = mongoTemplate.find(query, HospitalDocument.class);
+        List<HospitalNoPonto> candidatos = hospitalConsulta.ativosComGeofenceContendo(ponto);
 
         if (candidatos.isEmpty()) {
             throw new ValidacaoNegocioException("A posição informada não está dentro do geofence de nenhum hospital.");
         }
         if (candidatos.size() == 1) {
-            return candidatos.getFirst().getId();
+            return candidatos.getFirst().id();
         }
 
         // Sobreposição de geofences (E2-04/RN-05): ordena por distância ao centroide.
-        List<HospitalDocument> ordenados = candidatos.stream()
-                .sorted(Comparator.comparingDouble(h -> distanciaMetros(ponto, h.getLocalizacao())))
+        List<HospitalNoPonto> ordenados = candidatos.stream()
+                .sorted(Comparator.comparingDouble(h -> distanciaMetros(ponto, h.localizacao())))
                 .toList();
 
-        HospitalDocument maisProximo = ordenados.getFirst();
-        HospitalDocument segundo = ordenados.get(1);
-        double d1 = distanciaMetros(ponto, maisProximo.getLocalizacao());
-        double d2 = distanciaMetros(ponto, segundo.getLocalizacao());
+        HospitalNoPonto maisProximo = ordenados.getFirst();
+        HospitalNoPonto segundo = ordenados.get(1);
+        double d1 = distanciaMetros(ponto, maisProximo.localizacao());
+        double d2 = distanciaMetros(ponto, segundo.localizacao());
 
         // Empate (diferença ≤ 10m): não cria a visita; devolve candidatos para o app perguntar em 1 toque.
         if (Math.abs(d1 - d2) <= LIMITE_EMPATE_METROS) {
             List<CandidatoGeofence> candidatosResposta = ordenados.stream()
-                    .map(h -> new CandidatoGeofence(h.getId(), h.getNome(),
-                            distanciaMetros(ponto, h.getLocalizacao())))
+                    .map(h -> new CandidatoGeofence(h.id(), h.nome(),
+                            distanciaMetros(ponto, h.localizacao())))
                     .toList();
             throw new ConflitoGeofenceException(
                     "A posição está dentro de mais de um geofence com distâncias equivalentes. Escolha o hospital.",
                     candidatosResposta);
         }
 
-        return maisProximo.getId();
+        return maisProximo.id();
     }
 
     /** A posição está dentro do geofence deste hospital? Sem posição, não (SEG-01). */
@@ -512,18 +512,16 @@ public class VisitaServiceImpl implements VisitaService {
             return false;
         }
         GeoJsonPoint ponto = new GeoJsonPoint(longitude, latitude);
-        return mongoTemplate.exists(
-                new Query(Criteria.where("_id").is(hospitalId).and("geofence").intersects(ponto)),
-                HospitalDocument.class);
+        return hospitalConsulta.geofenceContem(hospitalId, ponto);
     }
 
     private String exigirHospitalAtivo(String hospitalId) {
-        HospitalDocument hospital = hospitalConsulta.findById(hospitalId)
+        HospitalParaVisita hospital = hospitalConsulta.resumo(hospitalId)
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Hospital não encontrado para o id informado."));
-        if (!hospital.isAtivo()) {
+        if (!hospital.ativo()) {
             throw new ValidacaoNegocioException("Hospital inativo não pode receber check-in.");
         }
-        return hospital.getId();
+        return hospital.id();
     }
 
     /** Distância aproximada (haversine, em metros) entre dois pontos GeoJSON. */
@@ -675,8 +673,8 @@ public class VisitaServiceImpl implements VisitaService {
         if (distintos.isEmpty()) {
             return Map.of();
         }
-        return hospitalConsulta.findAllById(distintos).stream()
-                .collect(Collectors.toMap(HospitalDocument::getId, HospitalDocument::getNome, (a, b) -> a));
+        return hospitalConsulta.resumos(distintos).stream()
+                .collect(Collectors.toMap(HospitalParaVisita::id, HospitalParaVisita::nome, (a, b) -> a));
     }
 
     private VisitaResponse toResponse(VisitaDocument v) {
