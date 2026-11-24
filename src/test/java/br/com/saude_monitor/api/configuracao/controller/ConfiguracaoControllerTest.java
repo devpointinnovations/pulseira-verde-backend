@@ -47,8 +47,12 @@ class ConfiguracaoControllerTest {
 
     @Test
     void leituraPublicaComCacheDeUmMinuto() throws Exception {
-        when(servico.obterConfiguracao()).thenReturn(new ConfiguracaoRemotaResponse(true, "1.0.0", null));
-        when(catalogoService.obterCatalogo()).thenReturn(new CatalogoResponse("versao-do-catalogo", 0, List.of()));
+        when(servico.obterConfiguracao()).thenReturn(ConfiguracaoRemotaResponse.builder()
+            .modoSomenteLeitura(true)
+            .versaoMinimaApp("1.0.0")
+            .mensagem(null)
+            .build());
+        when(catalogoService.obterCatalogo()).thenReturn(CatalogoResponse.builder().versao("versao-do-catalogo").total(0).estabelecimentos(List.of()).build());
 
         mockMvc.perform(get("/api/v1/configuracao"))
                 .andExpect(status().isOk())
@@ -60,7 +64,11 @@ class ConfiguracaoControllerTest {
 
     @Test
     void semBancoParaOCatalogoAConfiguracaoChegaSemAVersao() throws Exception {
-        when(servico.obterConfiguracao()).thenReturn(new ConfiguracaoRemotaResponse(false, "1.0.0", null));
+        when(servico.obterConfiguracao()).thenReturn(ConfiguracaoRemotaResponse.builder()
+            .modoSomenteLeitura(false)
+            .versaoMinimaApp("1.0.0")
+            .mensagem(null)
+            .build());
         when(catalogoService.obterCatalogo()).thenThrow(new DataAccessResourceFailureException("Mongo fora"));
 
         mockMvc.perform(get("/api/v1/configuracao"))
@@ -73,7 +81,11 @@ class ConfiguracaoControllerTest {
     void administradorAlteraAConfiguracao() throws Exception {
         when(autenticacao.usuarioIdAtual()).thenReturn(Optional.of("admin-1"));
         when(servico.atualizar(any(ConfiguracaoRemotaRequest.class), eq("admin-1")))
-                .thenReturn(new ConfiguracaoRemotaResponse(false, "1.1.0", null));
+                .thenReturn(ConfiguracaoRemotaResponse.builder()
+            .modoSomenteLeitura(false)
+            .versaoMinimaApp("1.1.0")
+            .mensagem(null)
+            .build());
 
         mockMvc.perform(put("/api/v1/admin/configuracao").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"modoSomenteLeitura\":false,\"versaoMinimaApp\":\"1.1.0\"}"))

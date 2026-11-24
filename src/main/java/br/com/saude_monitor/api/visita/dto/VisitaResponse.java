@@ -5,6 +5,7 @@ import br.com.saude_monitor.api.visita.document.StatusVisita;
 import br.com.saude_monitor.api.visita.document.TipoPermanencia;
 
 import java.time.Instant;
+import lombok.Builder;
 
 /**
  * Representação completa de uma visita, usada no card de visita ativa e no histórico (§3.3).
@@ -15,6 +16,7 @@ import java.time.Instant;
  * (E5-03/RN-22 — "visita + hospital"), conforme Especificacao-API-v2.0 §3.5. No card de visita ativa
  * ele permanece {@code null}, pois o detalhe já busca o hospital.
  */
+@Builder
 public record VisitaResponse(
         String id,
         String usuarioId,

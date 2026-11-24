@@ -238,12 +238,13 @@ public class IndicadorServiceImpl implements IndicadorService {
     /** Indicadores embutidos compactos (listagem/detalhe) — omite valores se N < 5 (RN-15). */
     private IndicadoresResponse toIndicadoresResponse(IndicadorHospitalDocument a) {
         boolean disponivel = a.getNAvaliacoes() != null && a.getNAvaliacoes() >= 5;
-        return new IndicadoresResponse(
-                disponivel,
-                disponivel ? a.getNotaMedia() : null,
-                a.getNAvaliacoes(),
-                disponivel ? a.getTempoMedianoMinutos() : null,
-                a.getAtualizadoEm());
+        return IndicadoresResponse.builder()
+                .indicadoresDisponiveis(disponivel)
+                .notaMedia(disponivel ? a.getNotaMedia() : null)
+                .nAvaliacoes(a.getNAvaliacoes())
+                .tempoMedianoMinutos(disponivel ? a.getTempoMedianoMinutos() : null)
+                .atualizadoEm(a.getAtualizadoEm())
+                .build();
     }
 
     /** Indicadores enriquecidos do endpoint dedicado (§3.5). */
@@ -252,14 +253,15 @@ public class IndicadorServiceImpl implements IndicadorService {
         var periodo = a.getPeriodoInicio() == null || a.getPeriodoFim() == null
                 ? null
                 : PeriodoDoIndicador.builder().inicio(a.getPeriodoInicio()).fim(a.getPeriodoFim()).build();
-        return new IndicadoresDetalheResponse(
-                a.getHospitalId(),
-                disponivel,
-                disponivel ? a.getNotaMedia() : null,
-                a.getNAvaliacoes(),
-                disponivel ? a.getTempoMedianoMinutos() : null,
-                a.getNVisitas(),
-                periodo,
-                a.getAtualizadoEm());
+        return IndicadoresDetalheResponse.builder()
+                .hospitalId(a.getHospitalId())
+                .indicadoresDisponiveis(disponivel)
+                .notaMedia(disponivel ? a.getNotaMedia() : null)
+                .nAvaliacoes(a.getNAvaliacoes())
+                .tempoMedianoMinutos(disponivel ? a.getTempoMedianoMinutos() : null)
+                .nVisitas(a.getNVisitas())
+                .periodo(periodo)
+                .atualizadoEm(a.getAtualizadoEm())
+                .build();
     }
 }

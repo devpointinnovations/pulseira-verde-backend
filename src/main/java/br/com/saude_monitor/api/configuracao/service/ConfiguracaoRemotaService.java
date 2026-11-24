@@ -64,7 +64,11 @@ public class ConfiguracaoRemotaService implements FonteDoModoSomenteLeitura {
     public ConfiguracaoRemotaResponse obterConfiguracao() {
         ConfiguracaoRemotaResponse lida = obterConfiguracaoGuardada();
         if (contencao.somenteLeituraForcado() && !lida.modoSomenteLeitura()) {
-            return new ConfiguracaoRemotaResponse(true, lida.versaoMinimaApp(), lida.mensagem());
+            return ConfiguracaoRemotaResponse.builder()
+            .modoSomenteLeitura(true)
+            .versaoMinimaApp(lida.versaoMinimaApp())
+            .mensagem(lida.mensagem())
+            .build();
         }
         return lida;
     }
@@ -120,7 +124,10 @@ public class ConfiguracaoRemotaService implements FonteDoModoSomenteLeitura {
     }
 
     private static ConfiguracaoRemotaResponse converterParaResposta(ConfiguracaoRemotaDocument documento) {
-        return new ConfiguracaoRemotaResponse(
-                documento.isModoSomenteLeitura(), documento.getVersaoMinimaApp(), documento.getMensagem());
+        return ConfiguracaoRemotaResponse.builder()
+            .modoSomenteLeitura(documento.isModoSomenteLeitura())
+            .versaoMinimaApp(documento.getVersaoMinimaApp())
+            .mensagem(documento.getMensagem())
+            .build();
     }
 }

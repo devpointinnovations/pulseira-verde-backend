@@ -1,5 +1,7 @@
 package br.com.saude_monitor.api.configuracao.dto;
 
+import lombok.Builder;
+
 /**
  * Configuração remota que o app lê ao abrir e ao voltar ao primeiro plano (ARQ-09).
  *
@@ -10,6 +12,7 @@ package br.com.saude_monitor.api.configuracao.dto;
  *                           cópia do aparelho, o app baixa o catálogo de novo; {@code null}
  *                           quando não foi possível montar o catálogo agora (o app mantém a cópia)
  */
+@Builder
 public record ConfiguracaoRemotaResponse(
         boolean modoSomenteLeitura,
         String versaoMinimaApp,
@@ -18,15 +21,15 @@ public record ConfiguracaoRemotaResponse(
 ) {
 
     /** Sem documento gravado: tudo liberado. */
-    public static final ConfiguracaoRemotaResponse PADRAO = new ConfiguracaoRemotaResponse(false, null, null);
-
-    /** Configuração gravada pelo painel, ainda sem a versão do catálogo (o controller público a junta). */
-    public ConfiguracaoRemotaResponse(boolean modoSomenteLeitura, String versaoMinimaApp, String mensagem) {
-        this(modoSomenteLeitura, versaoMinimaApp, mensagem, null);
-    }
+    public static final ConfiguracaoRemotaResponse PADRAO = ConfiguracaoRemotaResponse.builder().modoSomenteLeitura(false).build();
 
     /** A mesma configuração com a versão do catálogo informada. */
     public ConfiguracaoRemotaResponse comVersaoCatalogo(String versao) {
-        return new ConfiguracaoRemotaResponse(modoSomenteLeitura, versaoMinimaApp, mensagem, versao);
+        return ConfiguracaoRemotaResponse.builder()
+                .modoSomenteLeitura(modoSomenteLeitura)
+                .versaoMinimaApp(versaoMinimaApp)
+                .mensagem(mensagem)
+                .versaoCatalogo(versao)
+                .build();
     }
 }

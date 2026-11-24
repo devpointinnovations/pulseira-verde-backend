@@ -23,7 +23,7 @@ class VisitaExceptionHandlerTest {
         @GetMapping("/empate")
         String empate() {
             throw new ConflitoGeofenceException("Escolha o hospital.",
-                    List.of(new CandidatoGeofence("h1", "Hospital Um", 3.5), new CandidatoGeofence("h2", "Hospital Dois", 4.0)));
+                    List.of(CandidatoGeofence.builder().hospitalId("h1").nome("Hospital Um").distanciaMetros(3.5).build(), CandidatoGeofence.builder().hospitalId("h2").nome("Hospital Dois").distanciaMetros(4.0).build()));
         }
 
         @GetMapping("/falha")

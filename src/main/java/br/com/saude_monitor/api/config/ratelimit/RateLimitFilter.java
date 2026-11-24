@@ -226,15 +226,15 @@ public class RateLimitFilter extends OncePerRequestFilter {
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding("UTF-8");
 
-        ApiError body = new ApiError(
-                Instant.now(),
-                SC_TOO_MANY_REQUESTS,
-                "LIMITE_EXCEDIDO",
-                "Muitas requisições. Tente novamente em instantes. Limite: "
-                        + limite + " por minuto.",
-                List.<CampoInvalido>of(),
-                UUID.randomUUID().toString().replace("-", "")
-        );
+        ApiError body = ApiError.builder()
+                .timestamp(Instant.now())
+                .status(SC_TOO_MANY_REQUESTS)
+                .code("LIMITE_EXCEDIDO")
+                .message("Muitas requisições. Tente novamente em instantes. Limite: "
+                        + limite + " por minuto.")
+                .details(List.<CampoInvalido>of())
+                .traceId(UUID.randomUUID().toString().replace("-", ""))
+                .build();
         objectMapper.writeValue(response.getOutputStream(), body);
     }
 }

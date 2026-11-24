@@ -7,6 +7,7 @@ import br.com.saude_monitor.api.feedback.document.MotivoNaoAtendido;
 import br.com.saude_monitor.api.feedback.document.TeveMedico;
 
 import java.time.Instant;
+import lombok.Builder;
 
 /**
  * Resposta de feedback (§3.4 — {@code POST /api/v1/feedbacks} → 201, edição e histórico).
@@ -16,6 +17,7 @@ import java.time.Instant;
  * {@code editavelAte} é o fim do prazo de 15 dias para o dono editar (RN-09); nulo
  * quando a avaliação é anônima e, portanto, não tem dono que possa editá-la.</p>
  */
+@Builder
 public record FeedbackResponse(
         String id,
         String visitaId,

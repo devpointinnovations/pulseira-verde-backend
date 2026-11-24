@@ -93,25 +93,25 @@ public class EstabelecimentoLeitor {
     }
 
     private EstabelecimentoSaudeRaw paraRegistro(Map<String, String> c) {
-        return new EstabelecimentoSaudeRaw(
-                pegar(c, "codigocnes"),
-                pegar(c, "cnpj"),
-                pegar(c, "razaosocial"),
-                pegar(c, "nomefantasia"),
-                pegar(c, "logradouro"),
-                pegar(c, "numero"),
-                pegar(c, "complemento"),
-                pegar(c, "bairro"),
-                pegar(c, "municipio"),
-                pegar(c, "uf"),
-                pegar(c, "cep"),
-                pegar(c, "telefone"),
-                pegar(c, "email"),
-                pegar(c, "tipounidade"),
-                pegar(c, "descricaotipounidade"),
-                parseDouble(pegar(c, "latitude", "lat")),
-                parseDouble(pegar(c, "longitude", "lon", "lng"))
-        );
+        return EstabelecimentoSaudeRaw.builder()
+                .codigoCnes(pegar(c, "codigocnes"))
+                .cnpj(pegar(c, "cnpj"))
+                .razaoSocial(pegar(c, "razaosocial"))
+                .nomeFantasia(pegar(c, "nomefantasia"))
+                .logradouro(pegar(c, "logradouro"))
+                .numero(pegar(c, "numero"))
+                .complemento(pegar(c, "complemento"))
+                .bairro(pegar(c, "bairro"))
+                .municipio(pegar(c, "municipio"))
+                .uf(pegar(c, "uf"))
+                .cep(pegar(c, "cep"))
+                .telefone(pegar(c, "telefone"))
+                .email(pegar(c, "email"))
+                .tipoUnidade(pegar(c, "tipounidade"))
+                .descricaoTipoUnidade(pegar(c, "descricaotipounidade"))
+                .latitude(parseDouble(pegar(c, "latitude", "lat")))
+                .longitude(parseDouble(pegar(c, "longitude", "lon", "lng")))
+                .build();
     }
 
     private String pegar(Map<String, String> c, String... chaves) {

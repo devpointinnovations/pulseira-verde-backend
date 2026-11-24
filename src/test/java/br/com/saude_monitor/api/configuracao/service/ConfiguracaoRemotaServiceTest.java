@@ -52,7 +52,11 @@ class ConfiguracaoRemotaServiceTest {
         when(repository.findById(ConfiguracaoRemotaDocument.ID_UNICO)).thenReturn(criarConfiguracaoGravada(true, "1.2.0"));
         ConfiguracaoRemotaService servico = criarServico(NORMAL);
 
-        assertThat(servico.obterConfiguracao()).isEqualTo(new ConfiguracaoRemotaResponse(true, "1.2.0", "aviso"));
+        assertThat(servico.obterConfiguracao()).isEqualTo(ConfiguracaoRemotaResponse.builder()
+            .modoSomenteLeitura(true)
+            .versaoMinimaApp("1.2.0")
+            .mensagem("aviso")
+            .build());
         relogio.avancarSegundos(29);
         assertThat(servico.isModoSomenteLeitura()).isTrue();
         verify(repository, times(1)).findById(ConfiguracaoRemotaDocument.ID_UNICO);
@@ -87,7 +91,11 @@ class ConfiguracaoRemotaServiceTest {
 
         ConfiguracaoRemotaResponse resposta = criarServico(new ContencaoProperties(80, 5, 300, true)).obterConfiguracao();
 
-        assertThat(resposta).isEqualTo(new ConfiguracaoRemotaResponse(true, "1.0.0", "aviso"));
+        assertThat(resposta).isEqualTo(ConfiguracaoRemotaResponse.builder()
+            .modoSomenteLeitura(true)
+            .versaoMinimaApp("1.0.0")
+            .mensagem("aviso")
+            .build());
     }
 
     @Test
@@ -115,7 +123,11 @@ class ConfiguracaoRemotaServiceTest {
         assertThat(gravado.getValue().getId()).isEqualTo(ConfiguracaoRemotaDocument.ID_UNICO);
         assertThat(gravado.getValue().getAtualizadoPor()).isEqualTo("admin-1");
         assertThat(gravado.getValue().getAtualizadoEm()).isEqualTo(AGORA);
-        assertThat(resposta).isEqualTo(new ConfiguracaoRemotaResponse(true, "1.1.0", "Manutenção"));
+        assertThat(resposta).isEqualTo(ConfiguracaoRemotaResponse.builder()
+            .modoSomenteLeitura(true)
+            .versaoMinimaApp("1.1.0")
+            .mensagem("Manutenção")
+            .build());
         assertThat(servico.isModoSomenteLeitura()).isTrue();
         verify(repository, times(1)).findById(ConfiguracaoRemotaDocument.ID_UNICO);
     }

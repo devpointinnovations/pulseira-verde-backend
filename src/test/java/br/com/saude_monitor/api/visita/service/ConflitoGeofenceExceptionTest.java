@@ -22,8 +22,12 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class ConflitoGeofenceExceptionTest {
 
-    private static final CandidatoGeofence HRAN = new CandidatoGeofence("h-1", "Hospital Regional da Asa Norte", 42.0);
-    private static final CandidatoGeofence HBDF = new CandidatoGeofence("h-2", "Hospital de Base", 47.5);
+    private static final CandidatoGeofence HRAN = CandidatoGeofence.builder()
+            .hospitalId("h-1")
+            .nome("Hospital Regional da Asa Norte")
+            .distanciaMetros(42.0)
+            .build();
+    private static final CandidatoGeofence HBDF = CandidatoGeofence.builder().hospitalId("h-2").nome("Hospital de Base").distanciaMetros(47.5).build();
 
     @Test
     void serializaEDesserializaPreservandoOsCandidatos() throws Exception {

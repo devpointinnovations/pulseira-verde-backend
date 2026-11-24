@@ -1,6 +1,7 @@
 package br.com.saude_monitor.api.hospital.dto;
 
 import java.time.Instant;
+import lombok.Builder;
 
 /**
  * Indicadores públicos do hospital (placeholder do Épico 01).
@@ -9,6 +10,7 @@ import java.time.Instant;
  * (pacote {@code indicador}). Até lá, a API retorna {@code indicadoresDisponiveis = false} para
  * manter o contrato estável.</p>
  */
+@Builder
 public record IndicadoresResponse(
         boolean indicadoresDisponiveis,
         Double notaMedia,
@@ -19,6 +21,12 @@ public record IndicadoresResponse(
 
     /** Fábrica padrão enquanto os indicadores (Épico 04) não estão disponíveis. */
     public static IndicadoresResponse indisponivel() {
-        return new IndicadoresResponse(false, null, null, null, null);
+        return IndicadoresResponse.builder()
+                .indicadoresDisponiveis(false)
+                .notaMedia(null)
+                .nAvaliacoes(null)
+                .tempoMedianoMinutos(null)
+                .atualizadoEm(null)
+                .build();
     }
 }

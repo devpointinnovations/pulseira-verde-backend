@@ -22,14 +22,14 @@ public class VisitaExceptionHandler {
     /** Empate de geofences sobrepostos no check-in (E2-04/RN-05) — 409 com candidatos para o app perguntar. */
     @ExceptionHandler(ConflitoGeofenceException.class)
     public ResponseEntity<ConflitoGeofenceResponse> handleConflitoGeofence(ConflitoGeofenceException ex) {
-        ConflitoGeofenceResponse body = new ConflitoGeofenceResponse(
-                Instant.now(),
-                HttpStatus.CONFLICT.value(),
-                "CONFLITO_GEOFENCE",
-                ex.getMessage(),
-                ex.getCandidatos(),
-                UUID.randomUUID().toString().replace("-", "")
-        );
+        ConflitoGeofenceResponse body = ConflitoGeofenceResponse.builder()
+                .timestamp(Instant.now())
+                .status(HttpStatus.CONFLICT.value())
+                .code("CONFLITO_GEOFENCE")
+                .message(ex.getMessage())
+                .candidatos(ex.getCandidatos())
+                .traceId(UUID.randomUUID().toString().replace("-", ""))
+                .build();
         return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
     }
 }

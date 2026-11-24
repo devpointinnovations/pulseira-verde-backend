@@ -167,7 +167,13 @@ public class VisitaServiceImpl implements VisitaService {
             }
             return responderVisitaJaAtiva(vencedora, hospitalId);
         }
-        return new CheckinResponse(salva.getId(), salva.getHospitalId(), salva.getEntrada(), salva.getStatus(), true);
+        return CheckinResponse.builder()
+                .id(salva.getId())
+                .hospitalId(salva.getHospitalId())
+                .entrada(salva.getEntrada())
+                .status(salva.getStatus())
+                .criado(true)
+                .build();
     }
 
     private static boolean isViolacaoDeVisitaAtivaUnica(DuplicateKeyException e) {
@@ -189,8 +195,13 @@ public class VisitaServiceImpl implements VisitaService {
             throw new ConflitoException(
                     "Você já possui um check-in ativo em outro hospital. Finalize-o antes de iniciar uma nova visita.");
         }
-        return new CheckinResponse(existente.getId(), existente.getHospitalId(),
-                existente.getEntrada(), existente.getStatus(), false);
+        return CheckinResponse.builder()
+                .id(existente.getId())
+                .hospitalId(existente.getHospitalId())
+                .entrada(existente.getEntrada())
+                .status(existente.getStatus())
+                .criado(false)
+                .build();
     }
 
     @Override
@@ -223,8 +234,13 @@ public class VisitaServiceImpl implements VisitaService {
         apagarPontos(update);
 
         VisitaDocument salva = atualizarSeAtiva(id, update);
-        return new CheckoutResponse(salva.getId(), salva.getSaida(), salva.getDuracaoMinutos(),
-                salva.getStatus(), salva.isEncerramentoManual());
+        return CheckoutResponse.builder()
+                .id(salva.getId())
+                .saida(salva.getSaida())
+                .duracaoMinutos(salva.getDuracaoMinutos())
+                .status(salva.getStatus())
+                .encerramentoManual(salva.isEncerramentoManual())
+                .build();
     }
 
     @Override
@@ -488,8 +504,11 @@ public class VisitaServiceImpl implements VisitaService {
         // Empate (diferença ≤ 10m): não cria a visita; devolve candidatos para o app perguntar em 1 toque.
         if (Math.abs(d1 - d2) <= LIMITE_EMPATE_METROS) {
             List<CandidatoGeofence> candidatosResposta = ordenados.stream()
-                    .map(h -> new CandidatoGeofence(h.id(), h.nome(),
-                            distanciaMetros(ponto, h.localizacao())))
+                    .map(h -> CandidatoGeofence.builder()
+                            .hospitalId(h.id())
+                            .nome(h.nome())
+                            .distanciaMetros(distanciaMetros(ponto, h.localizacao()))
+                            .build())
                     .toList();
             throw new ConflitoGeofenceException(
                     "A posição está dentro de mais de um geofence com distâncias equivalentes. Escolha o hospital.",
@@ -611,8 +630,13 @@ public class VisitaServiceImpl implements VisitaService {
         if (salva == null) {
             throw new ConflitoException("Visita já encerrada.");
         }
-        return new CheckoutResponse(salva.getId(), salva.getSaida(), salva.getDuracaoMinutos(),
-                salva.getStatus(), salva.isEncerramentoManual());
+        return CheckoutResponse.builder()
+                .id(salva.getId())
+                .saida(salva.getSaida())
+                .duracaoMinutos(salva.getDuracaoMinutos())
+                .status(salva.getStatus())
+                .encerramentoManual(salva.isEncerramentoManual())
+                .build();
     }
 
     /**
@@ -684,9 +708,20 @@ public class VisitaServiceImpl implements VisitaService {
     private VisitaResponse toResponse(VisitaDocument v, String hospitalNome) {
         // RN-07/E2-08: visita "curta" (< 2min) permanece no histórico, mas não é estatisticamente válida.
         boolean visitaValida = v.getDuracaoMinutos() == null || v.getDuracaoMinutos() >= 2;
-        return new VisitaResponse(
-                v.getId(), v.getUsuarioId(), v.getHospitalId(), hospitalNome, v.getEntrada(), v.getSaida(),
-                v.getDuracaoMinutos(), v.getStatus(), v.getTipoPermanencia(), v.getUltimoHeartbeat(),
-                v.getOrigem(), v.getCriadoEm(), visitaValida);
+        return VisitaResponse.builder()
+                .id(v.getId())
+                .usuarioId(v.getUsuarioId())
+                .hospitalId(v.getHospitalId())
+                .hospitalNome(hospitalNome)
+                .entrada(v.getEntrada())
+                .saida(v.getSaida())
+                .duracaoMinutos(v.getDuracaoMinutos())
+                .status(v.getStatus())
+                .tipoPermanencia(v.getTipoPermanencia())
+                .ultimoHeartbeat(v.getUltimoHeartbeat())
+                .origem(v.getOrigem())
+                .criadoEm(v.getCriadoEm())
+                .visitaValida(visitaValida)
+                .build();
     }
 }

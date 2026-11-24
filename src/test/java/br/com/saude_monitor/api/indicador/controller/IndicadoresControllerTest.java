@@ -35,13 +35,19 @@ class IndicadoresControllerTest {
 
     @Test
     void deveRetornarIndicadoresDisponiveis() throws Exception {
-        var detalhe = new IndicadoresDetalheResponse(
-                "hosp-1", true, 4.2, 12, 95, 34,
-                PeriodoDoIndicador.builder()
+        var detalhe = IndicadoresDetalheResponse.builder()
+                .hospitalId("hosp-1")
+                .indicadoresDisponiveis(true)
+                .notaMedia(4.2)
+                .nAvaliacoes(12)
+                .tempoMedianoMinutos(95)
+                .nVisitas(34)
+                .periodo(PeriodoDoIndicador.builder()
                         .inicio(Instant.parse("2026-05-10T00:00:00Z"))
                         .fim(Instant.parse("2026-08-07T23:59:59Z"))
-                        .build(),
-                Instant.parse("2026-08-07T16:55:05Z"));
+                        .build())
+                .atualizadoEm(Instant.parse("2026-08-07T16:55:05Z"))
+                .build();
         when(indicadorService.obterDetalhe("hosp-1")).thenReturn(detalhe);
 
         mockMvc.perform(get("/api/v1/hospitais/hosp-1/indicadores"))

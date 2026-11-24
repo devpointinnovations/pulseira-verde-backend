@@ -1,6 +1,7 @@
 package br.com.saude_monitor.api.indicador.dto;
 
 import java.time.Instant;
+import lombok.Builder;
 
 /**
  * Resposta do endpoint dedicado {@code GET /api/v1/hospitais/{id}/indicadores} (§3.5).
@@ -12,6 +13,7 @@ import java.time.Instant;
  * <p>Quando {@code nAvaliacoes < 5} (RN-15), {@code indicadoresDisponiveis = false} e os
  * campos de valor ficam {@code null}.</p>
  */
+@Builder
 public record IndicadoresDetalheResponse(
         String hospitalId,
         boolean indicadoresDisponiveis,
@@ -25,6 +27,15 @@ public record IndicadoresDetalheResponse(
 
     /** Fábrica padrão quando não há indicador materializado ainda (nenhum feedback/visita). */
     public static IndicadoresDetalheResponse indisponivel(String hospitalId) {
-        return new IndicadoresDetalheResponse(hospitalId, false, null, null, null, null, null, null);
+        return IndicadoresDetalheResponse.builder()
+                .hospitalId(hospitalId)
+                .indicadoresDisponiveis(false)
+                .notaMedia(null)
+                .nAvaliacoes(null)
+                .tempoMedianoMinutos(null)
+                .nVisitas(null)
+                .periodo(null)
+                .atualizadoEm(null)
+                .build();
     }
 }

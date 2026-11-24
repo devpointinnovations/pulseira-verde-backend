@@ -58,7 +58,13 @@ class VisitaGeofenceCheckinTest {
     }
 
     private CheckinRequest checkinGeofence(PosicaoDto posicao) {
-        return new CheckinRequest(null, OrigemVisita.GEOFENCE, posicao, "anon-1", null);
+        return CheckinRequest.builder()
+                .hospitalId(null)
+                .origem(OrigemVisita.GEOFENCE)
+                .posicao(posicao)
+                .dispositivoId("anon-1")
+                .ocorridoEm(null)
+                .build();
     }
 
     @Test

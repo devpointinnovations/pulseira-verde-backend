@@ -4,6 +4,7 @@ import br.com.saude_monitor.api.hospital.document.CategoriaEstabelecimento;
 import br.com.saude_monitor.api.hospital.document.TipoEstabelecimento;
 
 import java.time.Instant;
+import lombok.Builder;
 
 /**
  * Resposta completa do hospital (detalhe público e respostas de escrita admin).
@@ -14,6 +15,7 @@ import java.time.Instant;
  * {@link HospitalResumoResponse}, para a tela de detalhe do painel não depender de
  * carregar o campo por fora (ex. estado de navegação, frágil em reload direto da URL).</p>
  */
+@Builder
 public record HospitalResponse(
         String id,
         String nome,

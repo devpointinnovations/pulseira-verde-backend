@@ -91,7 +91,13 @@ class HospitalServiceImplTest {
     }
 
     private IndicadoresResponse disp(double nota, int tempo) {
-        return new IndicadoresResponse(true, nota, 8, tempo, null);
+        return IndicadoresResponse.builder()
+                .indicadoresDisponiveis(true)
+                .notaMedia(nota)
+                .nAvaliacoes(8)
+                .tempoMedianoMinutos(tempo)
+                .atualizadoEm(null)
+                .build();
     }
 
     @Test

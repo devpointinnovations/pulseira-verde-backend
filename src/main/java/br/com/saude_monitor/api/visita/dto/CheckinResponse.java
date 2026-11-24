@@ -3,11 +3,13 @@ package br.com.saude_monitor.api.visita.dto;
 import br.com.saude_monitor.api.visita.document.StatusVisita;
 
 import java.time.Instant;
+import lombok.Builder;
 
 /**
  * Resposta de check-in. {@code criado = true} indica visita nova (HTTP 201); {@code false}
  * indica retorno idempotente de visita ativa já existente no mesmo hospital (HTTP 200, RN-03/§3.3).
  */
+@Builder
 public record CheckinResponse(
         String id,
         String hospitalId,

@@ -2,6 +2,7 @@ package br.com.saude_monitor.api.visita.dto;
 
 import java.time.Instant;
 import java.util.List;
+import lombok.Builder;
 
 /**
  * Resposta de conflito de geofences sobrepostos (HTTP 409, E2-04/RN-05): quando o ponto do
@@ -9,6 +10,7 @@ import java.util.List;
  * desprezível (empate ≤ 10m), a API não cria a visita e devolve os candidatos para o app
  * perguntar em 1 toque.
  */
+@Builder
 public record ConflitoGeofenceResponse(
         Instant timestamp,
         int status,

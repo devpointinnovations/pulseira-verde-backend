@@ -23,8 +23,16 @@ class IndicadoresDetalheResponseTest {
                 .inicio(Instant.parse("2026-08-01T00:00:00Z"))
                 .fim(Instant.parse("2026-10-30T00:00:00Z"))
                 .build();
-        IndicadoresDetalheResponse resposta = new IndicadoresDetalheResponse(
-                "h1", true, 4.5, 12, 35, 40, periodo, Instant.parse("2026-10-30T00:05:00Z"));
+        IndicadoresDetalheResponse resposta = IndicadoresDetalheResponse.builder()
+                .hospitalId("h1")
+                .indicadoresDisponiveis(true)
+                .notaMedia(4.5)
+                .nAvaliacoes(12)
+                .tempoMedianoMinutos(35)
+                .nVisitas(40)
+                .periodo(periodo)
+                .atualizadoEm(Instant.parse("2026-10-30T00:05:00Z"))
+                .build();
 
         JsonNode json = MAPPER.valueToTree(resposta);
 
