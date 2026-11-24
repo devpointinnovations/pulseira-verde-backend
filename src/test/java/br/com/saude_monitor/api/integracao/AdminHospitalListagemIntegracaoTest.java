@@ -7,6 +7,7 @@ import br.com.saude_monitor.api.hospital.document.TipoEstabelecimento;
 import br.com.saude_monitor.api.hospital.service.GeofenceFactory;
 import br.com.saude_monitor.api.user.document.Papel;
 import br.com.saude_monitor.api.user.document.UserDocument;
+import br.com.saude_monitor.api.user.dto.UsuarioAutenticavel;
 import br.com.saude_monitor.api.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -96,7 +97,7 @@ class AdminHospitalListagemIntegracaoTest extends IntegracaoTestBase {
                 .papel(papel)
                 .active(true)
                 .build());
-        return jwtService.generateAccessToken(usuario);
+        return jwtService.generateAccessToken(UsuarioAutenticavel.builder().email(usuario.getEmail()).build());
     }
 
     // ---------------------------------------------------------------

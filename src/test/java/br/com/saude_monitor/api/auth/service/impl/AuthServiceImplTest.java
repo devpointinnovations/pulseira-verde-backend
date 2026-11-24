@@ -21,6 +21,8 @@ import br.com.saude_monitor.api.config.security.JwtProperties;
 import br.com.saude_monitor.api.config.security.JwtService;
 import br.com.saude_monitor.api.user.document.Papel;
 import br.com.saude_monitor.api.user.document.UserDocument;
+import br.com.saude_monitor.api.user.dto.UsuarioAutenticavel;
+import br.com.saude_monitor.api.user.repository.UserRepository;
 import br.com.saude_monitor.api.user.service.UsuarioConsulta;
 import org.bson.Document;
 import org.junit.jupiter.api.BeforeEach;
@@ -62,7 +64,7 @@ import static org.mockito.Mockito.when;
 class AuthServiceImplTest {
 
     private AuthServiceImpl authService;
-    private UsuarioConsulta usuarioConsulta;
+    private UserRepository userRepository;
     private JwtService jwtService;
     private RefreshTokenRevogadoRepository revogadoRepository;
     private CodigoVerificacaoRepository codigoVerificacaoRepository;
@@ -72,7 +74,7 @@ class AuthServiceImplTest {
 
     @BeforeEach
     void setup() {
-        usuarioConsulta = mock(UsuarioConsulta.class);
+        userRepository = mock(UserRepository.class);
         revogadoRepository = mock(RefreshTokenRevogadoRepository.class);
         codigoVerificacaoRepository = mock(CodigoVerificacaoRepository.class);
         emailService = mock(EmailService.class);
@@ -89,12 +91,16 @@ class AuthServiceImplTest {
         jwtService = new JwtService(properties);
 
         authService = new AuthServiceImpl(
-                usuarioConsulta, passwordEncoder, jwtService, revogadoRepository,
+                new UsuarioConsulta(userRepository), passwordEncoder, jwtService, revogadoRepository,
                 codigoVerificacaoRepository, emailService, mongoTemplate,
                 new LimiteEnvioEmail(), TempoMinimoResposta.criarSemPiso());
     }
 
     /** "Ativo" aqui inclui e-mail confirmado — a maioria dos testes não exercita esse eixo. */
+    private static UsuarioAutenticavel autenticavel(UserDocument u) {
+        return UsuarioAutenticavel.builder().id(u.getId()).email(u.getEmail()).build();
+    }
+
     private UserDocument usuarioAtivo(String email) {
         return UserDocument.builder()
                 .id("1")
@@ -120,7 +126,7 @@ class AuthServiceImplTest {
                 .emailVerificado(true)
                 .build();
 
-        when(usuarioConsulta.findByEmail(anyString())).thenReturn(Optional.of(user));
+        when(userRepository.findByEmail(anyString())).thenReturn(Optional.of(user));
 
         AuthResponse response = authService.login(new LoginRequest("marina@email.com", "S3nh@Forte!", false));
 
@@ -144,7 +150,7 @@ class AuthServiceImplTest {
                 .active(true)
                 .emailVerificado(false)
                 .build();
-        when(usuarioConsulta.findByEmail(anyString())).thenReturn(Optional.of(user));
+        when(userRepository.findByEmail(anyString())).thenReturn(Optional.of(user));
 
         EmailNaoConfirmadoException ex = assertThrows(EmailNaoConfirmadoException.class,
                 () -> authService.login(new LoginRequest("marina@email.com", "S3nh@Forte!", false)));
@@ -162,7 +168,7 @@ class AuthServiceImplTest {
                 .active(true)
                 .build();
 
-        when(usuarioConsulta.findByEmail(anyString())).thenReturn(Optional.of(user));
+        when(userRepository.findByEmail(anyString())).thenReturn(Optional.of(user));
 
         assertThrows(NaoAutorizadoException.class,
                 () -> authService.login(new LoginRequest("marina@email.com", "senha-errada", false)));
@@ -170,7 +176,7 @@ class AuthServiceImplTest {
 
     @Test
     void deveRejeitarUsuarioInexistente() {
-        when(usuarioConsulta.findByEmail(anyString())).thenReturn(Optional.empty());
+        when(userRepository.findByEmail(anyString())).thenReturn(Optional.empty());
 
         assertThrows(NaoAutorizadoException.class,
                 () -> authService.login(new LoginRequest("nao@existe.com", "qualquer", false)));
@@ -179,8 +185,8 @@ class AuthServiceImplTest {
     @Test
     void deveRenovarTokensComRefreshValido() {
         UserDocument user = usuarioAtivo("marina@email.com");
-        String refreshToken = jwtService.generateRefreshToken(user);
-        when(usuarioConsulta.findByEmail(anyString())).thenReturn(Optional.of(user));
+        String refreshToken = jwtService.generateRefreshToken(autenticavel(user));
+        when(userRepository.findByEmail(anyString())).thenReturn(Optional.of(user));
 
         AuthResponse response = authService.refresh(new RefreshRequest(refreshToken));
 
@@ -199,7 +205,7 @@ class AuthServiceImplTest {
     @Test
     void deveRevogarRefreshTokenNoLogout() {
         UserDocument user = usuarioAtivo("marina@email.com");
-        String refreshToken = jwtService.generateRefreshToken(user);
+        String refreshToken = jwtService.generateRefreshToken(autenticavel(user));
         String jti = jwtService.extractJti(refreshToken);
 
         Map<String, Object> resposta = authService.logout(new RefreshRequest(refreshToken));
@@ -215,10 +221,10 @@ class AuthServiceImplTest {
     @Test
     void deveRejeitarRefreshDeTokenRevogado() {
         UserDocument user = usuarioAtivo("marina@email.com");
-        String refreshToken = jwtService.generateRefreshToken(user);
+        String refreshToken = jwtService.generateRefreshToken(autenticavel(user));
         String jti = jwtService.extractJti(refreshToken);
         when(revogadoRepository.existsById(jti)).thenReturn(true);
-        when(usuarioConsulta.findByEmail(anyString())).thenReturn(Optional.of(user));
+        when(userRepository.findByEmail(anyString())).thenReturn(Optional.of(user));
 
         NaoAutorizadoException ex = assertThrows(NaoAutorizadoException.class,
                 () -> authService.refresh(new RefreshRequest(refreshToken)));
@@ -242,7 +248,7 @@ class AuthServiceImplTest {
         // Segundo logout com o mesmo refresh token: jti já está na blacklist, o insert
         // falha por chave duplicada — esperado e inofensivo, resposta continua 200-like.
         UserDocument user = usuarioAtivo("marina@email.com");
-        String refreshToken = jwtService.generateRefreshToken(user);
+        String refreshToken = jwtService.generateRefreshToken(autenticavel(user));
         when(revogadoRepository.insert(any(RefreshTokenRevogadoDocument.class)))
                 .thenThrow(new DuplicateKeyException("E11000 duplicate key"));
 
@@ -258,7 +264,7 @@ class AuthServiceImplTest {
         // sempre respondia "sessão encerrada" — mesmo quando o refresh token continuava
         // válido por não ter sido revogado de fato (ex.: falha de conexão com o Mongo).
         UserDocument user = usuarioAtivo("marina@email.com");
-        String refreshToken = jwtService.generateRefreshToken(user);
+        String refreshToken = jwtService.generateRefreshToken(autenticavel(user));
         when(revogadoRepository.insert(any(RefreshTokenRevogadoDocument.class)))
                 .thenThrow(new RuntimeException("Mongo indisponível"));
 
@@ -271,7 +277,7 @@ class AuthServiceImplTest {
     @Test
     void esqueciSenhaGeraEEnviaCodigoQuandoEmailExiste() {
         UserDocument user = usuarioAtivo("marina@email.com");
-        when(usuarioConsulta.findByEmail("marina@email.com")).thenReturn(Optional.of(user));
+        when(userRepository.findByEmail("marina@email.com")).thenReturn(Optional.of(user));
 
         Map<String, Object> resposta = authService.esqueciSenha(new EsqueciSenhaRequest("marina@email.com"));
 
@@ -288,7 +294,7 @@ class AuthServiceImplTest {
         // sempre recalculado — nunca há mais de um código ativo por e-mail (decisão 3
         // do plano), nem um contador de tentativas herdado de um código velho.
         UserDocument user = usuarioAtivo("marina@email.com");
-        when(usuarioConsulta.findByEmail("marina@email.com")).thenReturn(Optional.of(user));
+        when(userRepository.findByEmail("marina@email.com")).thenReturn(Optional.of(user));
 
         authService.esqueciSenha(new EsqueciSenhaRequest("marina@email.com"));
 
@@ -301,7 +307,7 @@ class AuthServiceImplTest {
 
     @Test
     void esqueciSenhaNaoEnviaEmailQuandoEmailNaoExisteMasRespostaEIgual() {
-        when(usuarioConsulta.findByEmail("fantasma@email.com")).thenReturn(Optional.empty());
+        when(userRepository.findByEmail("fantasma@email.com")).thenReturn(Optional.empty());
 
         Map<String, Object> resposta = authService.esqueciSenha(new EsqueciSenhaRequest("fantasma@email.com"));
 
@@ -323,10 +329,10 @@ class AuthServiceImplTest {
         // um estado de "stubbing em aberto" que quebrava os testes seguintes).
         PasswordEncoder encoderMockado = mock(PasswordEncoder.class);
         AuthServiceImpl service = new AuthServiceImpl(
-                usuarioConsulta, encoderMockado, jwtService, revogadoRepository,
+                new UsuarioConsulta(userRepository), encoderMockado, jwtService, revogadoRepository,
                 codigoVerificacaoRepository, emailService, mongoTemplate,
                 new LimiteEnvioEmail(), TempoMinimoResposta.criarSemPiso());
-        when(usuarioConsulta.findByEmail("fantasma@email.com")).thenReturn(Optional.empty());
+        when(userRepository.findByEmail("fantasma@email.com")).thenReturn(Optional.empty());
 
         service.esqueciSenha(new EsqueciSenhaRequest("fantasma@email.com"));
 
@@ -339,10 +345,10 @@ class AuthServiceImplTest {
         PasswordEncoder encoderMockado = mock(PasswordEncoder.class);
         when(encoderMockado.encode(anyString())).thenReturn("$2a$10$hashdescartavel");
         AuthServiceImpl service = new AuthServiceImpl(
-                usuarioConsulta, encoderMockado, jwtService, revogadoRepository,
+                new UsuarioConsulta(userRepository), encoderMockado, jwtService, revogadoRepository,
                 codigoVerificacaoRepository, emailService, mongoTemplate,
                 new LimiteEnvioEmail(), TempoMinimoResposta.criarSemPiso());
-        when(usuarioConsulta.findByEmail("fantasma@email.com")).thenReturn(Optional.empty());
+        when(userRepository.findByEmail("fantasma@email.com")).thenReturn(Optional.empty());
         LoginRequest pedido = new LoginRequest("fantasma@email.com", "qualquer", false);
 
         assertThrows(NaoAutorizadoException.class, () -> service.login(pedido));
@@ -355,7 +361,7 @@ class AuthServiceImplTest {
 
     @Test
     void codigosParaOMesmoDestinoParamNoLimiteSemMudarAResposta() {
-        when(usuarioConsulta.findByEmail("marina@email.com")).thenReturn(Optional.of(usuarioAtivo("marina@email.com")));
+        when(userRepository.findByEmail("marina@email.com")).thenReturn(Optional.of(usuarioAtivo("marina@email.com")));
         EsqueciSenhaRequest pedido = new EsqueciSenhaRequest("marina@email.com");
 
         for (int i = 0; i <= LimiteEnvioEmail.MAXIMO_POR_JANELA; i++) {
@@ -371,9 +377,9 @@ class AuthServiceImplTest {
         TempoMinimoResposta piso = mock(TempoMinimoResposta.class);
         when(piso.executarComTempoMinimo(any())).thenAnswer(inv -> inv.<java.util.function.Supplier<?>>getArgument(0).get());
         AuthServiceImpl service = new AuthServiceImpl(
-                usuarioConsulta, passwordEncoder, jwtService, revogadoRepository,
+                new UsuarioConsulta(userRepository), passwordEncoder, jwtService, revogadoRepository,
                 codigoVerificacaoRepository, emailService, mongoTemplate, new LimiteEnvioEmail(), piso);
-        when(usuarioConsulta.findByEmail(anyString())).thenReturn(Optional.empty());
+        when(userRepository.findByEmail(anyString())).thenReturn(Optional.empty());
 
         service.esqueciSenha(new EsqueciSenhaRequest("fantasma@email.com"));
         service.reenviarConfirmacaoEmail(new ReenviarConfirmacaoRequest("fantasma@email.com"));
@@ -400,13 +406,13 @@ class AuthServiceImplTest {
         UserDocument user = usuarioAtivo("marina@email.com");
         when(codigoVerificacaoRepository.findByEmailAndProposito("marina@email.com", Proposito.REDEFINIR_SENHA))
                 .thenReturn(Optional.of(tokenValido("marina@email.com", "123456", Proposito.REDEFINIR_SENHA)));
-        when(usuarioConsulta.findByEmail("marina@email.com")).thenReturn(Optional.of(user));
+        when(userRepository.findByEmail("marina@email.com")).thenReturn(Optional.of(user));
 
         Map<String, Object> resposta = authService.redefinirSenha(
                 new RedefinirSenhaRequest("marina@email.com", "123456", "N0vaSenha!"));
 
         assertTrue((Boolean) resposta.get("success"));
-        verify(usuarioConsulta).save(argThat((UserDocument u) ->
+        verify(userRepository).save(argThat((UserDocument u) ->
                 passwordEncoder.matches("N0vaSenha!", u.getSenhaHash())
                         && u.getSenhaAlteradaEm() != null));
         verify(codigoVerificacaoRepository).deleteByEmailAndProposito("marina@email.com", Proposito.REDEFINIR_SENHA);
@@ -432,7 +438,7 @@ class AuthServiceImplTest {
         verify(mongoTemplate).findAndModify(
                 any(Query.class), any(Update.class), any(FindAndModifyOptions.class), eq(CodigoVerificacaoDocument.class));
         verify(codigoVerificacaoRepository, never()).deleteByEmailAndProposito(anyString(), any(Proposito.class));
-        verify(usuarioConsulta, never()).save(any(UserDocument.class));
+        verify(userRepository, never()).save(any(UserDocument.class));
     }
 
     @Test
@@ -480,7 +486,7 @@ class AuthServiceImplTest {
         assertThrows(NaoAutorizadoException.class, () -> authService.redefinirSenha(
                 new RedefinirSenhaRequest("marina@email.com", "123456", "N0vaSenha!")));
 
-        verify(usuarioConsulta, never()).save(any(UserDocument.class));
+        verify(userRepository, never()).save(any(UserDocument.class));
     }
 
     @Test
@@ -510,13 +516,13 @@ class AuthServiceImplTest {
                 .active(true).emailVerificado(false).build();
         when(codigoVerificacaoRepository.findByEmailAndProposito("marina@email.com", Proposito.CONFIRMAR_EMAIL))
                 .thenReturn(Optional.of(tokenValido("marina@email.com", "123456", Proposito.CONFIRMAR_EMAIL)));
-        when(usuarioConsulta.findByEmail("marina@email.com")).thenReturn(Optional.of(user));
+        when(userRepository.findByEmail("marina@email.com")).thenReturn(Optional.of(user));
 
         Map<String, Object> resposta = authService.confirmarEmail(
                 new ConfirmarEmailRequest("marina@email.com", "123456"));
 
         assertTrue((Boolean) resposta.get("success"));
-        verify(usuarioConsulta).save(argThat(UserDocument::isEmailVerificado));
+        verify(userRepository).save(argThat(UserDocument::isEmailVerificado));
         verify(codigoVerificacaoRepository).deleteByEmailAndProposito("marina@email.com", Proposito.CONFIRMAR_EMAIL);
     }
 
@@ -528,7 +534,7 @@ class AuthServiceImplTest {
         assertThrows(NaoAutorizadoException.class, () -> authService.confirmarEmail(
                 new ConfirmarEmailRequest("marina@email.com", "000000")));
 
-        verify(usuarioConsulta, never()).save(any(UserDocument.class));
+        verify(userRepository, never()).save(any(UserDocument.class));
     }
 
     @Test
@@ -536,7 +542,7 @@ class AuthServiceImplTest {
         UserDocument user = UserDocument.builder()
                 .id("1").email("marina@email.com").senhaHash("hash").papel(Papel.USER)
                 .active(true).emailVerificado(false).build();
-        when(usuarioConsulta.findByEmail("marina@email.com")).thenReturn(Optional.of(user));
+        when(userRepository.findByEmail("marina@email.com")).thenReturn(Optional.of(user));
 
         Map<String, Object> resposta = authService.reenviarConfirmacaoEmail(
                 new ReenviarConfirmacaoRequest("marina@email.com"));
@@ -548,7 +554,7 @@ class AuthServiceImplTest {
     @Test
     void reenviarConfirmacaoNaoEnviaQuandoJaConfirmadoMasRespostaEIgual() {
         UserDocument user = usuarioAtivo("marina@email.com"); // emailVerificado=true
-        when(usuarioConsulta.findByEmail("marina@email.com")).thenReturn(Optional.of(user));
+        when(userRepository.findByEmail("marina@email.com")).thenReturn(Optional.of(user));
 
         Map<String, Object> resposta = authService.reenviarConfirmacaoEmail(
                 new ReenviarConfirmacaoRequest("marina@email.com"));
@@ -559,7 +565,7 @@ class AuthServiceImplTest {
 
     @Test
     void reenviarConfirmacaoNaoEnviaQuandoEmailNaoExisteMasRespostaEIgual() {
-        when(usuarioConsulta.findByEmail("fantasma@email.com")).thenReturn(Optional.empty());
+        when(userRepository.findByEmail("fantasma@email.com")).thenReturn(Optional.empty());
 
         Map<String, Object> resposta = authService.reenviarConfirmacaoEmail(
                 new ReenviarConfirmacaoRequest("fantasma@email.com"));
@@ -573,11 +579,11 @@ class AuthServiceImplTest {
     @Test
     void refreshEmitidoAntesDoResetDeSenhaEhRecusado() {
         UserDocument user = usuarioAtivo("marina@email.com");
-        String refreshToken = jwtService.generateRefreshToken(user);
+        String refreshToken = jwtService.generateRefreshToken(autenticavel(user));
 
         // A senha é "alterada" DEPOIS de o token acima ter sido emitido.
         user.setSenhaAlteradaEm(Instant.now().plusSeconds(5));
-        when(usuarioConsulta.findByEmail(anyString())).thenReturn(Optional.of(user));
+        when(userRepository.findByEmail(anyString())).thenReturn(Optional.of(user));
 
         NaoAutorizadoException ex = assertThrows(NaoAutorizadoException.class,
                 () -> authService.refresh(new RefreshRequest(refreshToken)));
@@ -591,8 +597,8 @@ class AuthServiceImplTest {
         UserDocument user = usuarioAtivo("marina@email.com");
         // A senha foi alterada ANTES da emissão do token abaixo.
         user.setSenhaAlteradaEm(Instant.now().minusSeconds(5));
-        String refreshToken = jwtService.generateRefreshToken(user);
-        when(usuarioConsulta.findByEmail(anyString())).thenReturn(Optional.of(user));
+        String refreshToken = jwtService.generateRefreshToken(autenticavel(user));
+        when(userRepository.findByEmail(anyString())).thenReturn(Optional.of(user));
 
         AuthResponse response = authService.refresh(new RefreshRequest(refreshToken));
 
@@ -607,10 +613,10 @@ class AuthServiceImplTest {
         // emitido DEPOIS dele — ex.: reset às 10:00:00.900, refresh gerado logo em
         // seguida às 10:00:00.950 (iat serializado como 10:00:00) caía como "anterior".
         UserDocument user = usuarioAtivo("marina@email.com");
-        String refreshToken = jwtService.generateRefreshToken(user);
+        String refreshToken = jwtService.generateRefreshToken(autenticavel(user));
         Instant iatTruncado = jwtService.extractIssuedAt(refreshToken);
         user.setSenhaAlteradaEm(iatTruncado.plusMillis(400));
-        when(usuarioConsulta.findByEmail(anyString())).thenReturn(Optional.of(user));
+        when(userRepository.findByEmail(anyString())).thenReturn(Optional.of(user));
 
         AuthResponse response = authService.refresh(new RefreshRequest(refreshToken));
 
@@ -623,8 +629,8 @@ class AuthServiceImplTest {
         // segue o caminho de sempre.
         UserDocument user = usuarioAtivo("marina@email.com");
         assertNull(user.getSenhaAlteradaEm());
-        String refreshToken = jwtService.generateRefreshToken(user);
-        when(usuarioConsulta.findByEmail(anyString())).thenReturn(Optional.of(user));
+        String refreshToken = jwtService.generateRefreshToken(autenticavel(user));
+        when(userRepository.findByEmail(anyString())).thenReturn(Optional.of(user));
 
         AuthResponse response = authService.refresh(new RefreshRequest(refreshToken));
 
@@ -643,7 +649,7 @@ class AuthServiceImplTest {
         assertThrows(NaoAutorizadoException.class, () -> authService.confirmarEmail(
                 new ConfirmarEmailRequest("marina@email.com", "123456")));
 
-        verify(usuarioConsulta, never()).save(any(UserDocument.class));
+        verify(userRepository, never()).save(any(UserDocument.class));
     }
 
     // ---------------------------------------------------------------------
@@ -659,7 +665,7 @@ class AuthServiceImplTest {
 
     @Test
     void loginPainelDeAdminEmiteTokens() {
-        when(usuarioConsulta.findByEmail("admin@email.com")).thenReturn(Optional.of(contaComSenha(Papel.ADMIN)));
+        when(userRepository.findByEmail("admin@email.com")).thenReturn(Optional.of(contaComSenha(Papel.ADMIN)));
 
         AuthResponse response = authService.loginPainel(new LoginRequest("admin@email.com", "S3nh@Forte!", false));
 
@@ -670,7 +676,7 @@ class AuthServiceImplTest {
 
     @Test
     void loginPainelDeContaNaoAdminRecebeOMesmoErroDeSenhaErrada() {
-        when(usuarioConsulta.findByEmail("admin@email.com")).thenReturn(Optional.of(contaComSenha(Papel.USER)));
+        when(userRepository.findByEmail("admin@email.com")).thenReturn(Optional.of(contaComSenha(Papel.USER)));
 
         LoginRequest senhaCerta = new LoginRequest("admin@email.com", "S3nh@Forte!", false);
         LoginRequest senhaErrada = new LoginRequest("admin@email.com", "outra-senha", false);
@@ -685,7 +691,7 @@ class AuthServiceImplTest {
 
     @Test
     void loginPainelDeContaSemPapelEhRecusado() {
-        when(usuarioConsulta.findByEmail("admin@email.com")).thenReturn(Optional.of(contaComSenha(null)));
+        when(userRepository.findByEmail("admin@email.com")).thenReturn(Optional.of(contaComSenha(null)));
         LoginRequest request = new LoginRequest("admin@email.com", "S3nh@Forte!", false);
 
         assertThrows(NaoAutorizadoException.class, () -> authService.loginPainel(request));
@@ -693,7 +699,7 @@ class AuthServiceImplTest {
 
     @Test
     void loginDoAppContinuaAceitandoQualquerPapel() {
-        when(usuarioConsulta.findByEmail("admin@email.com")).thenReturn(Optional.of(contaComSenha(Papel.USER)));
+        when(userRepository.findByEmail("admin@email.com")).thenReturn(Optional.of(contaComSenha(Papel.USER)));
 
         AuthResponse response = authService.login(new LoginRequest("admin@email.com", "S3nh@Forte!", false));
 
@@ -709,8 +715,8 @@ class AuthServiceImplTest {
     @Test
     void refreshPainelDeAdminRotacionaORefresh() {
         UserDocument admin = contaComSenha(Papel.ADMIN);
-        when(usuarioConsulta.findByEmail("admin@email.com")).thenReturn(Optional.of(admin));
-        String refresh = jwtService.generateRefreshToken(admin);
+        when(userRepository.findByEmail("admin@email.com")).thenReturn(Optional.of(admin));
+        String refresh = jwtService.generateRefreshToken(autenticavel(admin));
 
         AuthResponse response = authService.refreshPainel(refresh);
 
@@ -722,8 +728,8 @@ class AuthServiceImplTest {
     @Test
     void refreshPainelDeContaQuePerdeuOPapelAdminEhRecusadoSemRevogar() {
         UserDocument rebaixado = contaComSenha(Papel.USER);
-        when(usuarioConsulta.findByEmail("admin@email.com")).thenReturn(Optional.of(rebaixado));
-        String refresh = jwtService.generateRefreshToken(rebaixado);
+        when(userRepository.findByEmail("admin@email.com")).thenReturn(Optional.of(rebaixado));
+        String refresh = jwtService.generateRefreshToken(autenticavel(rebaixado));
 
         assertThrows(NaoAutorizadoException.class, () -> authService.refreshPainel(refresh));
         verify(revogadoRepository, never()).insert(any(RefreshTokenRevogadoDocument.class));

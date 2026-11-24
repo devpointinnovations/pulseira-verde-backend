@@ -2,6 +2,7 @@ package br.com.saude_monitor.api.config.security;
 
 import br.com.saude_monitor.api.user.document.Papel;
 import br.com.saude_monitor.api.user.document.UserDocument;
+import br.com.saude_monitor.api.user.repository.UserRepository;
 import br.com.saude_monitor.api.user.service.UsuarioConsulta;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -26,13 +27,13 @@ import static org.mockito.Mockito.when;
  */
 class CustomUserDetailsServiceTest {
 
-    private UsuarioConsulta usuarioConsulta;
+    private UserRepository userRepository;
     private CustomUserDetailsService service;
 
     @BeforeEach
     void setup() {
-        usuarioConsulta = mock(UsuarioConsulta.class);
-        service = new CustomUserDetailsService(usuarioConsulta);
+        userRepository = mock(UserRepository.class);
+        service = new CustomUserDetailsService(new UsuarioConsulta(userRepository));
     }
 
     @Test
@@ -44,7 +45,7 @@ class CustomUserDetailsServiceTest {
                 .papel(Papel.USER)
                 .active(true)
                 .build();
-        when(usuarioConsulta.findByEmail("marina@email.com")).thenReturn(Optional.of(user));
+        when(userRepository.findByEmail("marina@email.com")).thenReturn(Optional.of(user));
 
         UserDetails details = service.loadUserByUsername("  MARINA@email.com ");
 
@@ -57,7 +58,7 @@ class CustomUserDetailsServiceTest {
     void emailNuloNaoChegaAoRepositorioENaoLancaExcecaoDeAcessoADados() {
         assertThatThrownBy(() -> service.loadUserByUsername(null))
                 .isInstanceOf(UsernameNotFoundException.class);
-        verify(usuarioConsulta, never()).findByEmail(eq(null));
+        verify(userRepository, never()).findByEmail(eq(null));
     }
 
     @Test
@@ -69,7 +70,7 @@ class CustomUserDetailsServiceTest {
                 .papel(Papel.USER)
                 .active(false)
                 .build();
-        when(usuarioConsulta.findByEmail("marina@email.com")).thenReturn(Optional.of(user));
+        when(userRepository.findByEmail("marina@email.com")).thenReturn(Optional.of(user));
 
         UserDetails details = service.loadUserByUsername("marina@email.com");
 

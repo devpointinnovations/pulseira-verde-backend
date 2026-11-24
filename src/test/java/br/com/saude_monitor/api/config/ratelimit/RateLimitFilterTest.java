@@ -2,7 +2,7 @@ package br.com.saude_monitor.api.config.ratelimit;
 
 import br.com.saude_monitor.api.config.security.JwtProperties;
 import br.com.saude_monitor.api.config.security.JwtService;
-import br.com.saude_monitor.api.user.document.UserDocument;
+import br.com.saude_monitor.api.user.dto.UsuarioAutenticavel;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.junit.jupiter.api.BeforeEach;
@@ -316,8 +316,8 @@ class RateLimitFilterTest {
         }
     }
 
-    private static UserDocument criarUsuario(String email) {
-        return UserDocument.builder().id(email).email(email).build();
+    private static UsuarioAutenticavel criarUsuario(String email) {
+        return UsuarioAutenticavel.builder().id(email).email(email).build();
     }
 
     private static final String CLIENTE_A = "3f2b8c1e-0d4a-4e8b-9c7f-1a2b3c4d5e6f";
