@@ -2,7 +2,7 @@ package br.com.saude_monitor.api.hospital.service;
 
 import br.com.saude_monitor.api.hospital.document.HospitalDocument;
 import br.com.saude_monitor.api.hospital.dto.HospitalNoPonto;
-import br.com.saude_monitor.api.hospital.dto.HospitalParaVisita;
+import br.com.saude_monitor.api.hospital.dto.HospitalResumo;
 import br.com.saude_monitor.api.hospital.repository.HospitalRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.mongodb.core.MongoTemplate;
@@ -23,11 +23,11 @@ public class HospitalConsulta {
     private final HospitalRepository hospitalRepository;
     private final MongoTemplate mongoTemplate;
 
-    public Optional<HospitalParaVisita> resumo(String id) {
+    public Optional<HospitalResumo> resumo(String id) {
         return hospitalRepository.findById(id).map(HospitalConsulta::paraResumo);
     }
 
-    public List<HospitalParaVisita> resumos(Collection<String> ids) {
+    public List<HospitalResumo> resumos(Collection<String> ids) {
         return hospitalRepository.findAllById(ids).stream().map(HospitalConsulta::paraResumo).toList();
     }
 
@@ -46,19 +46,12 @@ public class HospitalConsulta {
                 HospitalDocument.class);
     }
 
-    private static HospitalParaVisita paraResumo(HospitalDocument h) {
-        return HospitalParaVisita.builder().id(h.getId()).nome(h.getNome()).ativo(h.isAtivo()).build();
+    private static HospitalResumo paraResumo(HospitalDocument h) {
+        return HospitalResumo.builder().id(h.getId()).nome(h.getNome()).ativo(h.isAtivo()).build();
     }
 
     public boolean existsById(String id) {
         return hospitalRepository.existsById(id);
     }
 
-    public Optional<HospitalDocument> findById(String id) {
-        return hospitalRepository.findById(id);
-    }
-
-    public List<HospitalDocument> findAllById(Collection<String> ids) {
-        return hospitalRepository.findAllById(ids);
-    }
 }
