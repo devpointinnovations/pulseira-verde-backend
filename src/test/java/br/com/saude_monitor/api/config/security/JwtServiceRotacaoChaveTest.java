@@ -1,6 +1,6 @@
 package br.com.saude_monitor.api.config.security;
 
-import br.com.saude_monitor.api.user.document.UserDocument;
+import br.com.saude_monitor.api.user.dto.UsuarioAutenticavel;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.jsonwebtoken.Jwts;
@@ -36,10 +36,8 @@ class JwtServiceRotacaoChaveTest {
         return new JwtService(new JwtProperties(legada, ACCESS_MS, REFRESH_MS, chavesJson, ativa));
     }
 
-    private static UserDocument usuario() {
-        UserDocument usuario = new UserDocument();
-        usuario.setEmail(EMAIL);
-        return usuario;
+    private static UsuarioAutenticavel usuario() {
+        return UsuarioAutenticavel.builder().email(EMAIL).build();
     }
 
     private static String kidDoCabecalho(String token) {

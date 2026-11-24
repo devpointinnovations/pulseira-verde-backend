@@ -1,5 +1,6 @@
 package br.com.saude_monitor.api.config.security;
 
+import br.com.saude_monitor.api.user.dto.UsuarioAutenticavel;
 import br.com.saude_monitor.api.user.service.UsuarioConsulta;
 import br.com.saude_monitor.api.user.util.EmailNormalizer;
 import lombok.RequiredArgsConstructor;
@@ -21,8 +22,8 @@ public class AutenticacaoHelper {
 
     public Optional<String> usuarioIdAtual() {
         return usuarioEmailAtual()
-                .flatMap(email -> usuarioConsulta.findByEmail(EmailNormalizer.normalizar(email)))
-                .map(u -> u.getId());
+                .flatMap(email -> usuarioConsulta.autenticavelPorEmail(EmailNormalizer.normalizar(email)))
+                .map(UsuarioAutenticavel::id);
     }
 
     public Optional<String> usuarioEmailAtual() {
