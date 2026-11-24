@@ -3,7 +3,7 @@ package br.com.saude_monitor.api.user.service.impl;
 import br.com.saude_monitor.api.config.security.UsuarioAutenticadoCache;
 import br.com.saude_monitor.api.feedback.service.FeedbackConsulta;
 import br.com.saude_monitor.api.indicador.service.IndicadorService;
-import br.com.saude_monitor.api.auth.service.AuthService;
+import br.com.saude_monitor.api.user.service.EnvioDeConfirmacaoDeEmail;
 import br.com.saude_monitor.api.visita.service.VisitaConsulta;
 import br.com.saude_monitor.api.config.exception.ConflitoException;
 import br.com.saude_monitor.api.config.exception.RecursoNaoEncontradoException;
@@ -59,7 +59,7 @@ public class UserServiceImpl implements UserService {
     private final VisitaConsulta visitaConsulta;
     private final FeedbackConsulta feedbackConsulta;
     private final IndicadorService indicadorService;
-    private final AuthService authService;
+    private final EnvioDeConfirmacaoDeEmail envioDeConfirmacaoDeEmail;
     private final UsuarioAutenticadoCache usuarioAutenticadoCache;
 
     @Override
@@ -93,7 +93,7 @@ public class UserServiceImpl implements UserService {
         // digitação ou inexistente nunca recebe o código de "esqueci minha senha" — a
         // conta fica sem recuperação possível. O login fica bloqueado até confirmar
         // (AuthServiceImpl.login()).
-        authService.enviarCodigoConfirmacaoEmail(normalizedEmail);
+        envioDeConfirmacaoDeEmail.enviarCodigoConfirmacaoEmail(normalizedEmail);
 
         return new UserResponse(
                 true,

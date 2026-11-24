@@ -13,6 +13,7 @@ import br.com.saude_monitor.api.user.document.Papel;
 import br.com.saude_monitor.api.feedback.repository.FeedbackRepository;
 import br.com.saude_monitor.api.feedback.service.FeedbackConsulta;
 import br.com.saude_monitor.api.user.document.UserDocument;
+import br.com.saude_monitor.api.user.service.EnvioDeConfirmacaoDeEmail;
 import br.com.saude_monitor.api.visita.repository.VisitaRepository;
 import br.com.saude_monitor.api.visita.service.VisitaConsulta;
 import br.com.saude_monitor.api.user.dto.AtualizarConsentimentosRequest;
@@ -205,6 +206,24 @@ class UserServiceImplTest {
         // digitação nunca recebe nenhum código e a conta fica sem recuperação possível.
         assertFalse(captor.getValue().isEmailVerificado());
         verify(authService).enviarCodigoConfirmacaoEmail("marina@email.com");
+    }
+
+    @Test
+    void cadastroEnviaOCodigoDeConfirmacaoSoDepoisDeGravarAContaEPeloEnvioDoUser() {
+        when(userRepository.findByEmail("marina@email.com")).thenReturn(Optional.empty());
+        when(userRepository.save(any(UserDocument.class))).thenAnswer(inv -> inv.getArgument(0));
+        EnvioDeConfirmacaoDeEmail envio = mock(EnvioDeConfirmacaoDeEmail.class);
+        UserServiceImpl servico = new UserServiceImpl(userRepository, new BCryptPasswordEncoder(),
+                new VisitaConsulta(mock(VisitaRepository.class), mongoTemplate),
+                new FeedbackConsulta(mock(FeedbackRepository.class), mongoTemplate),
+                indicadorService, envio, usuarioAutenticadoCache);
+
+        servico.saveUser(new UserRequest("Marina Souza", "MARINA@email.com", "S3nh@Forte!",
+                "(11) 99999-0000", new ConsentimentoRequest(true, "1.0")));
+
+        InOrder ordem = inOrder(userRepository, envio);
+        ordem.verify(userRepository).save(any(UserDocument.class));
+        ordem.verify(envio).enviarCodigoConfirmacaoEmail("marina@email.com");
     }
 
     @Test
