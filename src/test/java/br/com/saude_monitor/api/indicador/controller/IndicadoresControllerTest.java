@@ -1,12 +1,8 @@
 package br.com.saude_monitor.api.indicador.controller;
 
-import br.com.saude_monitor.api.hospital.service.CatalogoService;
 import br.com.saude_monitor.api.indicador.dto.IndicadoresDetalheResponse;
 import br.com.saude_monitor.api.indicador.dto.PeriodoDoIndicador;
 import br.com.saude_monitor.api.indicador.service.IndicadorService;
-import br.com.saude_monitor.api.config.security.AutenticacaoHelper;
-import br.com.saude_monitor.api.hospital.controller.HospitalController;
-import br.com.saude_monitor.api.hospital.service.HospitalService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.web.servlet.MockMvc;
@@ -26,7 +22,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 class IndicadoresControllerTest {
 
-    private final HospitalService hospitalService = mock(HospitalService.class);
     private final IndicadorService indicadorService = mock(IndicadorService.class);
 
     private MockMvc mockMvc;
@@ -34,8 +29,7 @@ class IndicadoresControllerTest {
     @BeforeEach
     void setup() {
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new HospitalController(hospitalService, new AutenticacaoHelper(null), indicadorService,
-                        mock(CatalogoService.class)))
+                .standaloneSetup(new IndicadoresController(indicadorService))
                 .build();
     }
 
@@ -79,5 +73,21 @@ class IndicadoresControllerTest {
 
         mockMvc.perform(get("/api/v1/hospitais/inexistente/indicadores"))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void rotaDeIndicadoresConvivecomOControllerDeHospitalSemMapeamentoDuplicado() throws Exception {
+        when(indicadorService.obterDetalhe("hosp-1")).thenReturn(IndicadoresDetalheResponse.indisponivel("hosp-1"));
+        MockMvc comOsDois = MockMvcBuilders.standaloneSetup(
+                        new br.com.saude_monitor.api.hospital.controller.HospitalController(
+                                mock(br.com.saude_monitor.api.hospital.service.HospitalService.class),
+                                new br.com.saude_monitor.api.config.security.AutenticacaoHelper(null),
+                                mock(br.com.saude_monitor.api.hospital.service.CatalogoService.class)),
+                        new IndicadoresController(indicadorService))
+                .build();
+
+        comOsDois.perform(get("/api/v1/hospitais/hosp-1/indicadores"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.indicadoresDisponiveis").value(false));
     }
 }

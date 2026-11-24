@@ -1,7 +1,5 @@
 package br.com.saude_monitor.api.hospital.controller;
 
-import br.com.saude_monitor.api.indicador.dto.IndicadoresDetalheResponse;
-import br.com.saude_monitor.api.indicador.service.IndicadorService;
 import br.com.saude_monitor.api.hospital.document.TipoEstabelecimento;
 import br.com.saude_monitor.api.config.security.AutenticacaoHelper;
 import br.com.saude_monitor.api.hospital.document.StatusSugestao;
@@ -58,7 +56,6 @@ public class HospitalController {
 
     private final HospitalService hospitalService;
     private final AutenticacaoHelper autenticacaoHelper;
-    private final IndicadorService indicadorService;
     private final CatalogoService catalogoService;
 
     /**
@@ -117,21 +114,6 @@ public class HospitalController {
     @SecurityRequirements
     public ResponseEntity<GeoJsonPolygonDto> buscarGeofence(@PathVariable String id) {
         return ResponseEntity.ok(hospitalService.buscarGeofence(id));
-    }
-
-    /**
-     * 🔓 Indicadores públicos enriquecidos do hospital (§3.5 / E4-01..E4-04).
-     * 404 se o hospital não existir; 200 com {@code indicadoresDisponiveis=false}
-     * quando ainda não há amostra suficiente (RN-15).
-     */
-    @GetMapping("/{id}/indicadores")
-    @SecurityRequirements
-    public ResponseEntity<IndicadoresDetalheResponse> buscarIndicadores(@PathVariable String id) {
-        IndicadoresDetalheResponse detalhe = indicadorService.obterDetalhe(id);
-        if (detalhe == null) {
-            return ResponseEntity.notFound().build();
-        }
-        return ResponseEntity.ok(detalhe);
     }
 
     /** 🛡️ Cadastro de hospital + geofence (admin). */
