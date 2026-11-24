@@ -7,6 +7,7 @@ import br.com.saude_monitor.api.indicador.dto.PeriodoDoIndicador;
 import br.com.saude_monitor.api.indicador.repository.IndicadorHospitalRepository;
 import br.com.saude_monitor.api.indicador.service.IndicadorService;
 import br.com.saude_monitor.api.indicador.service.EstatisticaService;
+import br.com.saude_monitor.api.indicador.service.TendenciaService;
 import br.com.saude_monitor.api.feedback.service.FeedbackConsulta;
 import br.com.saude_monitor.api.hospital.dto.IndicadoresResponse;
 import br.com.saude_monitor.api.hospital.service.HospitalConsulta;
@@ -49,7 +50,9 @@ import java.util.stream.Collectors;
  *       {@link PresencaVisita#isComprovada} (SEG-01); a avaliação de quem não comprovou
  *       presença continua aceita, mas fica fora do indicador público;</li>
  *   <li><b>{@code atualizadoEm}</b> — atualização ≤ 15min após feedback, via evento
- *       (RN-18) e job de 15min.</li>
+ *       (RN-18) e job de 15min;</li>
+ *   <li><b>tendência</b> (E4-06) — nota dos últimos 30 dias contra os 30 anteriores, com os
+ *       mesmos feedbacks já filtrados acima; regras em {@link TendenciaService}.</li>
  * </ul>
  *
  * <p>O upsert é idempotente por {@code hospitalId} (índice único) e o mapeamento da
@@ -108,6 +111,9 @@ public class IndicadorServiceImpl implements IndicadorService {
         Integer tempoMediano = EstatisticaService.tempoMedianoMinutos(duracoes);
         int nVisitas = duracoes.size();
 
+        // E4-06: os dois períodos de 30 dias cabem na janela de 90 já lida, sem consulta extra.
+        TendenciaService.Resultado tendencia = TendenciaService.calcular(feedbacks, fim);
+
         IndicadorHospitalDocument indicador = IndicadorHospitalDocument.builder()
                 .hospitalId(hospitalId)
                 .notaMedia(notaMedia)
@@ -117,6 +123,9 @@ public class IndicadorServiceImpl implements IndicadorService {
                 .periodoInicio(inicio)
                 .periodoFim(fim)
                 .atualizadoEm(fim)
+                .tendenciaNota(tendencia.tendencia())
+                .variacaoNota(tendencia.variacao())
+                .tendenciaPreliminar(tendencia.preliminar())
                 .build();
 
         persistir(indicador);
@@ -230,7 +239,10 @@ public class IndicadorServiceImpl implements IndicadorService {
                 .set("nVisitas", indicador.getNVisitas())
                 .set("periodoInicio", indicador.getPeriodoInicio())
                 .set("periodoFim", indicador.getPeriodoFim())
-                .set("atualizadoEm", indicador.getAtualizadoEm());
+                .set("atualizadoEm", indicador.getAtualizadoEm())
+                .set("tendenciaNota", indicador.getTendenciaNota())
+                .set("variacaoNota", indicador.getVariacaoNota())
+                .set("tendenciaPreliminar", indicador.getTendenciaPreliminar());
 
         mongoTemplate.upsert(query, update, IndicadorHospitalDocument.class);
     }
@@ -247,12 +259,23 @@ public class IndicadorServiceImpl implements IndicadorService {
                 .build();
     }
 
+    /**
+     * A tendência gravada só vale enquanto o período atual dela ainda tem avaliações (E4-06). O
+     * recálculo roda a cada feedback novo; sem recálculo há mais de {@link TendenciaService#JANELA},
+     * nenhum feedback entrou no período atual de hoje, então a tendência certa seria "sem dados"
+     * e a gravada é omitida.
+     */
+    static boolean tendenciaAtual(Instant atualizadoEm) {
+        return atualizadoEm != null && atualizadoEm.isAfter(Instant.now().minus(TendenciaService.JANELA));
+    }
+
     /** Indicadores enriquecidos do endpoint dedicado (§3.5). */
     private IndicadoresDetalheResponse toDetalheResponse(IndicadorHospitalDocument a) {
         boolean disponivel = a.getNAvaliacoes() != null && a.getNAvaliacoes() >= 5;
         var periodo = a.getPeriodoInicio() == null || a.getPeriodoFim() == null
                 ? null
                 : PeriodoDoIndicador.builder().inicio(a.getPeriodoInicio()).fim(a.getPeriodoFim()).build();
+        boolean comTendencia = disponivel && tendenciaAtual(a.getAtualizadoEm());
         return IndicadoresDetalheResponse.builder()
                 .hospitalId(a.getHospitalId())
                 .indicadoresDisponiveis(disponivel)
@@ -262,6 +285,9 @@ public class IndicadorServiceImpl implements IndicadorService {
                 .nVisitas(a.getNVisitas())
                 .periodo(periodo)
                 .atualizadoEm(a.getAtualizadoEm())
+                .tendenciaNota(comTendencia ? a.getTendenciaNota() : null)
+                .variacaoNota(comTendencia ? a.getVariacaoNota() : null)
+                .tendenciaPreliminar(comTendencia ? a.getTendenciaPreliminar() : null)
                 .build();
     }
 }

@@ -1,5 +1,6 @@
 package br.com.saude_monitor.api.indicador.document;
 
+import br.com.saude_monitor.api.indicador.dto.TendenciaNota;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -66,4 +67,16 @@ public class IndicadorHospitalDocument {
 
     /** Momento do último recálculo (RN-18/R-19 — "Atualizado em …"). */
     private Instant atualizadoEm;
+
+    /**
+     * Sentido da nota nos últimos 30 dias contra os 30 anteriores (E4-06); {@code null} sem
+     * 5 avaliações em cada período.
+     */
+    private TendenciaNota tendenciaNota;
+
+    /** Nota do período atual menos a do anterior, em duas casas (E4-06); {@code null} sem tendência. */
+    private Double variacaoNota;
+
+    /** Tendência com menos de 10 avaliações em algum período (E4-06); {@code null} sem tendência. */
+    private Boolean tendenciaPreliminar;
 }

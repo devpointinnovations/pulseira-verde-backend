@@ -69,11 +69,14 @@ class FeedbackConsultaTest {
     }
 
     @Test
-    void comNotaDesdeDevolveSoAVisitaEANota() {
+    void comNotaDesdeDevolveSoAVisitaANotaEACriacao() {
+        Instant criadoEm = DESDE.plusSeconds(60);
         when(repository.findByHospitalIdAndCriadoEmAfterAndNotaNotNull("h1", DESDE)).thenReturn(List.of(
-                FeedbackDocument.builder().visitaId("v1").hospitalId("h1").nota(4).comentario("ótimo").build()));
+                FeedbackDocument.builder().visitaId("v1").hospitalId("h1").nota(4).comentario("ótimo")
+                        .usuarioId("u1").criadoEm(criadoEm).build()));
 
-        assertEquals(List.of(FeedbackParaIndicador.builder().visitaId("v1").nota(4).build()), consulta.comNotaDesde("h1", DESDE));
+        assertEquals(List.of(FeedbackParaIndicador.builder().visitaId("v1").nota(4).criadoEm(criadoEm).build()),
+                consulta.comNotaDesde("h1", DESDE));
     }
 
     @Test
