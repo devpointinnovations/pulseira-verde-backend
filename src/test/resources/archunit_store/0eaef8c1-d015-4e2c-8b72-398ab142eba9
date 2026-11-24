@@ -1,15 +1,9 @@
 Ciclo entre módulos: auth -> user
 Ciclo entre módulos: feedback -> hospital
-Ciclo entre módulos: feedback -> indicador
-Ciclo entre módulos: feedback -> user
 Ciclo entre módulos: feedback -> visita
 Ciclo entre módulos: hospital -> indicador
 Ciclo entre módulos: indicador -> feedback
 Ciclo entre módulos: indicador -> hospital
 Ciclo entre módulos: indicador -> visita
 Ciclo entre módulos: user -> auth
-Ciclo entre módulos: user -> feedback
-Ciclo entre módulos: user -> hospital
-Ciclo entre módulos: user -> indicador
-Ciclo entre módulos: user -> visita
 Ciclo entre módulos: visita -> hospital

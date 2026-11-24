@@ -1,4 +1,4 @@
-package br.com.saude_monitor.api.feedback.seed;
+package br.com.saude_monitor.api.seed;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 

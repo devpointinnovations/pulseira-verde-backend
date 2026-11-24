@@ -1,8 +1,10 @@
-package br.com.saude_monitor.api.feedback.seed;
+package br.com.saude_monitor.api.seed;
 
 import br.com.saude_monitor.api.config.trava.TravaDistribuida;
 import br.com.saude_monitor.api.indicador.service.IndicadorService;
-import br.com.saude_monitor.api.feedback.document.FeedbackDocument;
+import br.com.saude_monitor.api.feedback.dto.ResumoDaMassa;
+import br.com.saude_monitor.api.feedback.seed.MassaAvaliacoesGerador;
+import br.com.saude_monitor.api.feedback.service.FeedbackMassa;
 import br.com.saude_monitor.api.hospital.dto.HospitalParaMassa;
 import br.com.saude_monitor.api.hospital.service.HospitalConsulta;
 import br.com.saude_monitor.api.user.dto.UsuarioDeMassa;
@@ -15,8 +17,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Profile;
 import org.springframework.context.event.EventListener;
 import org.springframework.data.mongodb.core.MongoTemplate;
-import org.springframework.data.mongodb.core.query.Criteria;
-import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
@@ -64,7 +64,7 @@ import java.util.regex.Pattern;
 public class MassaAvaliacoesRunner {
 
     /** Semente fixa: a mesma base de hospitais gera sempre a mesma distribuição. */
-    static final long SEMENTE = 20260929L;
+    static final long SEMENTE = MassaAvaliacoesGerador.SEMENTE_PADRAO;
 
     static final int QUANTIDADE_USUARIOS = 30;
 
@@ -84,7 +84,6 @@ public class MassaAvaliacoesRunner {
     /** ...e não pode indicar homologação ou produção. */
     private static final Pattern BANCO_PROIBIDO = Pattern.compile(".*(hom|prod).*");
 
-    private static final Pattern PREFIXO = Pattern.compile("^" + Pattern.quote(MassaAvaliacoesGerador.PREFIXO_ID));
 
     /** Usuário gravado primeiro em toda carga; o {@code createdAt} dele é a data da carga. */
     static final String PRIMEIRO_USUARIO = MassaAvaliacoesGerador.PREFIXO_ID + "usuario-01";
@@ -95,6 +94,7 @@ public class MassaAvaliacoesRunner {
             "Úrsula", "Vinícius", "Wanda", "Xavier", "Yara", "Zeca", "Beatriz", "Caio", "Débora", "Eduardo");
 
     private final MongoTemplate mongoTemplate;
+    private final FeedbackMassa feedbackMassa;
     private final HospitalConsulta hospitalConsulta;
     private final UsuarioMassa usuarioMassa;
     private final VisitaMassa visitaMassa;
@@ -134,8 +134,7 @@ public class MassaAvaliacoesRunner {
         }
 
         Instant agora = Instant.now().truncatedTo(ChronoUnit.SECONDS);
-        Query daMassa = daMassa();
-        boolean completa = mongoTemplate.exists(daMassa, FeedbackDocument.class);
+        boolean completa = feedbackMassa.existeComPrefixo(MassaAvaliacoesGerador.PREFIXO_ID);
         boolean resto = completa
                 || usuarioMassa.existeComPrefixo(MassaAvaliacoesGerador.PREFIXO_ID)
                 || visitaMassa.existeComPrefixo(MassaAvaliacoesGerador.PREFIXO_ID);
@@ -144,7 +143,7 @@ public class MassaAvaliacoesRunner {
             sincronizarSenha(agora);
             // Recalcula a cada boot: sem atividade recente, o job de 15 min não olharia
             // para estes hospitais e os indicadores ficariam congelados no dia da carga.
-            List<String> hospitais = mongoTemplate.findDistinct(daMassa, "hospitalId", FeedbackDocument.class, String.class);
+            List<String> hospitais = feedbackMassa.hospitaisComPrefixo(MassaAvaliacoesGerador.PREFIXO_ID);
             hospitais.forEach(indicadorService::recalcular);
             log.info("[MassaAvaliacoes] Massa já presente no banco '{}'; indicadores de {} hospitais recalculados.",
                     banco, hospitais.size());
@@ -164,27 +163,19 @@ public class MassaAvaliacoesRunner {
         List<UsuarioDeMassa> usuarios = usuarios(agora);
         usuarioMassa.inserir(usuarios);
 
-        MassaGerada massa = new MassaAvaliacoesGerador(SEMENTE, agora)
-                .gerar(hospitais, usuarios.stream().map(UsuarioDeMassa::id).toList());
-        visitaMassa.inserir(massa.visitas());
-        // Avaliações por último: são elas que marcam a carga como completa.
-        mongoTemplate.insertAll(massa.feedbacks());
+        ResumoDaMassa massa = feedbackMassa.gerarEGravar(SEMENTE, agora, hospitais,
+                usuarios.stream().map(UsuarioDeMassa::id).toList(), visitaMassa::inserir);
 
-        hospitaisAfetados.addAll(massa.perfilPorHospital().keySet());
+        hospitaisAfetados.addAll(massa.hospitais());
         hospitaisAfetados.forEach(indicadorService::recalcular);
 
         log.info("[MassaAvaliacoes] Banco '{}': {} usuários, {} visitas e {} avaliações em {} hospitais "
                         + "({} ativos ficaram sem avaliação). Senha dos usuários {}.",
-                banco, usuarios.size(), massa.visitas().size(), massa.feedbacks().size(),
-                massa.perfilPorHospital().size(), hospitais.size() - massa.perfilPorHospital().size(),
+                banco, usuarios.size(), massa.visitas(), massa.avaliacoes(),
+                massa.hospitais().size(), hospitais.size() - massa.hospitais().size(),
                 temSenha() ? "configurada" : "NÃO configurada (sem login)");
     }
 
-    private static Query daMassa() {
-        return Query.query(Criteria.where("_id").regex(PREFIXO));
-    }
-
-    /** Carga com mais de {@link #VALIDADE_MASSA} (ou sem data) é regerada com datas atuais. */
     private boolean vencida(Instant agora) {
         return usuarioMassa.criadoEm(PRIMEIRO_USUARIO)
                 .map(criadoEm -> criadoEm.isBefore(agora.minus(VALIDADE_MASSA)))
@@ -193,10 +184,8 @@ public class MassaAvaliacoesRunner {
 
     /** Apaga só os documentos da massa e devolve os hospitais cujo indicador precisa ser recalculado. */
     private Set<String> apagarMassa() {
-        Query daMassa = daMassa();
-        Set<String> hospitais = new HashSet<>(
-                mongoTemplate.findDistinct(daMassa, "hospitalId", FeedbackDocument.class, String.class));
-        long feedbacks = mongoTemplate.remove(daMassa, FeedbackDocument.class).getDeletedCount();
+        Set<String> hospitais = new HashSet<>(feedbackMassa.hospitaisComPrefixo(MassaAvaliacoesGerador.PREFIXO_ID));
+        long feedbacks = feedbackMassa.apagarComPrefixo(MassaAvaliacoesGerador.PREFIXO_ID);
         long visitas = visitaMassa.apagarComPrefixo(MassaAvaliacoesGerador.PREFIXO_ID);
         long usuarios = usuarioMassa.apagarComPrefixo(MassaAvaliacoesGerador.PREFIXO_ID);
         log.info("[MassaAvaliacoes] Massa anterior removida: {} avaliações, {} visitas e {} usuários.",
@@ -204,13 +193,6 @@ public class MassaAvaliacoesRunner {
         return hospitais;
     }
 
-    /**
-     * Mantém a senha dos usuários de teste igual à configuração a cada boot. Com senha
-     * configurada, ela é aplicada se ainda não estiver valendo (ex.: definida no serviço
-     * depois da carga). Sem senha, os usuários recebem uma senha aleatória — tirar a senha
-     * da configuração bloqueia o login de novo. Nos dois casos {@code senhaAlteradaEm}
-     * avança e os refresh tokens anteriores deixam de valer.
-     */
     private void sincronizarSenha(Instant agora) {
         String senha;
         if (temSenha()) {
