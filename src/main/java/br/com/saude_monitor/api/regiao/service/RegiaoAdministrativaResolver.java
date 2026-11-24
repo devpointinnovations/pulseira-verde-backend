@@ -92,7 +92,7 @@ public class RegiaoAdministrativaResolver {
                             PROPRIEDADE_NOME);
                     continue;
                 }
-                resultado.add(new RegiaoPoligono(nome, geometria));
+                resultado.add(RegiaoPoligono.builder().nome(nome).geometria(geometria).build());
             }
         } catch (Exception e) {
             // Falha aqui não pode derrubar a subida da aplicação (a camada continua servida
@@ -145,8 +145,5 @@ public class RegiaoAdministrativaResolver {
             coordenadas[i] = new Coordinate(par.get(0).asDouble(), par.get(1).asDouble());
         }
         return geometryFactory.createLinearRing(coordenadas);
-    }
-
-    private record RegiaoPoligono(String nome, Geometry geometria) {
     }
 }

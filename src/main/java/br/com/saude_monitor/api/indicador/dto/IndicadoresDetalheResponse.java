@@ -19,16 +19,12 @@ public record IndicadoresDetalheResponse(
         Integer nAvaliacoes,
         Integer tempoMedianoMinutos,
         Integer nVisitas,
-        Periodo periodo,
+        PeriodoDoIndicador periodo,
         Instant atualizadoEm
 ) {
 
     /** Fábrica padrão quando não há indicador materializado ainda (nenhum feedback/visita). */
     public static IndicadoresDetalheResponse indisponivel(String hospitalId) {
         return new IndicadoresDetalheResponse(hospitalId, false, null, null, null, null, null, null);
-    }
-
-    /** Intervalo (inclusivo) do período de cálculo (RN-19). */
-    public record Periodo(Instant inicio, Instant fim) {
     }
 }

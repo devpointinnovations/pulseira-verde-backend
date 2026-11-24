@@ -2,6 +2,7 @@ package br.com.saude_monitor.api.indicador.controller;
 
 import br.com.saude_monitor.api.hospital.service.CatalogoService;
 import br.com.saude_monitor.api.indicador.dto.IndicadoresDetalheResponse;
+import br.com.saude_monitor.api.indicador.dto.PeriodoDoIndicador;
 import br.com.saude_monitor.api.indicador.service.IndicadorService;
 import br.com.saude_monitor.api.config.security.AutenticacaoHelper;
 import br.com.saude_monitor.api.hospital.controller.HospitalController;
@@ -42,9 +43,10 @@ class IndicadoresControllerTest {
     void deveRetornarIndicadoresDisponiveis() throws Exception {
         var detalhe = new IndicadoresDetalheResponse(
                 "hosp-1", true, 4.2, 12, 95, 34,
-                new IndicadoresDetalheResponse.Periodo(
-                        Instant.parse("2026-05-10T00:00:00Z"),
-                        Instant.parse("2026-08-07T23:59:59Z")),
+                PeriodoDoIndicador.builder()
+                        .inicio(Instant.parse("2026-05-10T00:00:00Z"))
+                        .fim(Instant.parse("2026-08-07T23:59:59Z"))
+                        .build(),
                 Instant.parse("2026-08-07T16:55:05Z"));
         when(indicadorService.obterDetalhe("hosp-1")).thenReturn(detalhe);
 

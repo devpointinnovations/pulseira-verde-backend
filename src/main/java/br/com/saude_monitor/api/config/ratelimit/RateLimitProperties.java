@@ -12,7 +12,7 @@ import org.springframework.validation.annotation.Validated;
  * identidade sempre que existe uma; o IP só entra no teto de abuso ({@code ipPorMinuto}) e
  * nas rotas de autenticação que não têm outra identidade (cadastro, confirmação, senha).</p>
  *
- * <p>Os limites eram constantes do {@code enum} {@link RateLimitService.Grupo}. Viraram
+ * <p>Os limites eram constantes do {@code enum} {@link GrupoDeLimite}. Viraram
  * configuração em 23/09/2026 para o ambiente de homologação poder receber carga de
  * teste de desempenho vinda de uma única máquina — com 60 req/min por IP, o teste
  * mediria o limitador, não o sistema. Os padrões em {@code application.properties}

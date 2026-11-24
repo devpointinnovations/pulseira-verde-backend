@@ -62,30 +62,30 @@ class RateLimitFilterTest {
     void deveMapearLoginComoAuth() {
         RateLimitFilter filter = new RateLimitFilter(service, jsonMapper(), PADRAO, JWT);
         assertThat(filter.resolverGrupo("POST", "/api/v1/auth/login"))
-                .isEqualTo(RateLimitService.Grupo.AUTH);
+                .isEqualTo(GrupoDeLimite.AUTH);
         assertThat(filter.resolverGrupo("POST", "/api/v1/auth/refresh"))
-                .isEqualTo(RateLimitService.Grupo.AUTH);
+                .isEqualTo(GrupoDeLimite.AUTH);
     }
 
     @Test
     void deveMapearEndpointsPublicosComoPublico() {
         RateLimitFilter filter = new RateLimitFilter(service, jsonMapper(), PADRAO, JWT);
         assertThat(filter.resolverGrupo("GET", "/api/v1/hospitais"))
-                .isEqualTo(RateLimitService.Grupo.PUBLICO);
+                .isEqualTo(GrupoDeLimite.PUBLICO);
         assertThat(filter.resolverGrupo("GET", "/api/v1/hospitais/abc/indicadores"))
-                .isEqualTo(RateLimitService.Grupo.PUBLICO);
+                .isEqualTo(GrupoDeLimite.PUBLICO);
         assertThat(filter.resolverGrupo("GET", "/api/v1/catalogo"))
-                .isEqualTo(RateLimitService.Grupo.PUBLICO);
+                .isEqualTo(GrupoDeLimite.PUBLICO);
         assertThat(filter.resolverGrupo("GET", "/api/v1/catalogo/indicadores"))
-                .isEqualTo(RateLimitService.Grupo.PUBLICO);
+                .isEqualTo(GrupoDeLimite.PUBLICO);
         assertThat(filter.resolverGrupo("POST", "/api/v1/feedbacks"))
-                .isEqualTo(RateLimitService.Grupo.PUBLICO);
+                .isEqualTo(GrupoDeLimite.PUBLICO);
         assertThat(filter.resolverGrupo("POST", "/api/v1/hospitais/sugestoes"))
-                .isEqualTo(RateLimitService.Grupo.PUBLICO);
+                .isEqualTo(GrupoDeLimite.PUBLICO);
         assertThat(filter.resolverGrupo("GET", "/api/v1/camadas/regiao-saude"))
-                .isEqualTo(RateLimitService.Grupo.PUBLICO);
+                .isEqualTo(GrupoDeLimite.PUBLICO);
         assertThat(filter.resolverGrupo("GET", "/api/v1/configuracao"))
-                .isEqualTo(RateLimitService.Grupo.PUBLICO);
+                .isEqualTo(GrupoDeLimite.PUBLICO);
         assertThat(filter.resolverGrupo("PUT", "/api/v1/configuracao")).isNull();
     }
 
@@ -230,7 +230,7 @@ class RateLimitFilterTest {
                 .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("Limite: 100 por minuto")));
     }
 
-    // ------------------------------------------------ Identidade (ARQ-02) -------------
+    // ------------------------------------------------ IdentidadeDoLimite (ARQ-02) -------------
     // Atrás do CGNAT, centenas de celulares saem pelo mesmo IP: o limite de cada pessoa
     // não pode ser o do IP.
 
@@ -269,7 +269,7 @@ class RateLimitFilterTest {
         org.springframework.mock.web.MockHttpServletRequest req = new org.springframework.mock.web.MockHttpServletRequest();
         req.addHeader("Authorization", "Bearer nao-e-um-jwt");
         req.addHeader("X-Cliente-Id", "curto");
-        assertThat(filter.identificarCliente(req, RateLimitService.Grupo.PUBLICO, "10.1.0.3").chave())
+        assertThat(filter.identificarCliente(req, GrupoDeLimite.PUBLICO, "10.1.0.3").chave())
                 .isEqualTo("ip:10.1.0.3");
     }
 
@@ -279,7 +279,7 @@ class RateLimitFilterTest {
         org.springframework.mock.web.MockHttpServletRequest req = new org.springframework.mock.web.MockHttpServletRequest();
         req.addHeader("Authorization", "Bearer " + JWT.generateRefreshToken(criarUsuario("marina@email.com")));
         req.addHeader("X-Cliente-Id", CLIENTE_A);
-        assertThat(filter.identificarCliente(req, RateLimitService.Grupo.PUBLICO, "10.1.0.4").chave())
+        assertThat(filter.identificarCliente(req, GrupoDeLimite.PUBLICO, "10.1.0.4").chave())
                 .isEqualTo("cliente:" + CLIENTE_A);
     }
 
@@ -288,7 +288,7 @@ class RateLimitFilterTest {
         RateLimitFilter filter = new RateLimitFilter(service, jsonMapper(), PADRAO, JWT);
         org.springframework.mock.web.MockHttpServletRequest req = new org.springframework.mock.web.MockHttpServletRequest();
         req.addHeader("X-Cliente-Id", CLIENTE_A);
-        assertThat(filter.identificarCliente(req, RateLimitService.Grupo.AUTH, "10.1.0.5").chave())
+        assertThat(filter.identificarCliente(req, GrupoDeLimite.AUTH, "10.1.0.5").chave())
                 .isEqualTo("ip:10.1.0.5");
     }
 

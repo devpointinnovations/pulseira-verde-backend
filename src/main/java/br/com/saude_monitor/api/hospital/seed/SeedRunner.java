@@ -98,7 +98,7 @@ public class SeedRunner implements ApplicationRunner {
             return;
         }
 
-        Contagem contagem = new Contagem();
+        ContagemDoSeed contagem = new ContagemDoSeed();
 
         // Fase 1 — monta todos os documentos em memória, sem gravar. A ordem é
         // determinística (camadas em ordem alfabética, linhas em ordem) para logs
@@ -116,7 +116,7 @@ public class SeedRunner implements ApplicationRunner {
     }
 
     /** Lê as camadas SHP/DBF do diretório, em ordem alfabética. */
-    private void montarCamadas(Path diretorio, List<DocPendente> pendentes, Contagem contagem) {
+    private void montarCamadas(Path diretorio, List<DocPendente> pendentes, ContagemDoSeed contagem) {
         Charset charset = Charset.forName(properties.codepage());
         try (var fluxo = Files.list(diretorio)) {
             for (Path shp : fluxo
@@ -131,7 +131,7 @@ public class SeedRunner implements ApplicationRunner {
     }
 
     private void montarCamada(Path diretorio, Path shp, Charset charset,
-                              List<DocPendente> pendentes, Contagem contagem) {
+                              List<DocPendente> pendentes, ContagemDoSeed contagem) {
         String stem = stemDe(shp);
         if (CamadaEstabelecimento.CAMADAS_IGNORADAS.contains(stem)) {
             return; // camadas de limite/região
@@ -163,7 +163,7 @@ public class SeedRunner implements ApplicationRunner {
                 contagem.descartados++;
             } else {
                 lidos++;
-                pendentes.add(new DocPendente(doc, stem));
+                pendentes.add(DocPendente.builder().doc(doc).origem(stem).build());
             }
         }
         contagem.camadas++;
@@ -171,7 +171,7 @@ public class SeedRunner implements ApplicationRunner {
     }
 
     /** Lê o JSON de hospitais públicos complementares, quando presente. */
-    private void montarPublicosComplementares(Path diretorio, List<DocPendente> pendentes, Contagem contagem) {
+    private void montarPublicosComplementares(Path diretorio, List<DocPendente> pendentes, ContagemDoSeed contagem) {
         Path jsonPublicosComplementares = diretorio.resolve(ARQUIVO_PUBLICOS_COMPLEMENTARES);
         if (!Files.isRegularFile(jsonPublicosComplementares)) {
             return;
@@ -187,7 +187,7 @@ public class SeedRunner implements ApplicationRunner {
                     contagem.descartados++;
                 } else {
                     lidos++;
-                    pendentes.add(new DocPendente(doc, origem));
+                    pendentes.add(DocPendente.builder().doc(doc).origem(origem).build());
                 }
             }
             log.info("[Seed] Arquivo '{}': {} registro(s) montados.",
@@ -201,7 +201,7 @@ public class SeedRunner implements ApplicationRunner {
      * Fase 2a — documentos COM CNES primeiro (versão autoritativa: coordenadas e
      * atributos completos), registrando a chave de gêmeo de cada um.
      */
-    private Set<String> gravarComCnes(List<DocPendente> pendentes, Contagem contagem) {
+    private Set<String> gravarComCnes(List<DocPendente> pendentes, ContagemDoSeed contagem) {
         return pendentes.stream()
                 .map(DocPendente::doc)
                 .filter(doc -> doc.getCodigoCnes() != null && contagem.registrarResultado(salvarUpsert(doc)))
@@ -221,7 +221,7 @@ public class SeedRunner implements ApplicationRunner {
      * distintas do mesmo complexo), diferente do caso com CNES, onde a versão
      * autoritativa já foi confirmada na fase 2a.
      */
-    private void gravarSemCnes(List<DocPendente> pendentes, Set<String> chavesCnes, Contagem contagem) {
+    private void gravarSemCnes(List<DocPendente> pendentes, Set<String> chavesCnes, ContagemDoSeed contagem) {
         for (DocPendente pendente : pendentes) {
             if (pendente.doc().getCodigoCnes() != null) {
                 continue;
@@ -234,29 +234,6 @@ public class SeedRunner implements ApplicationRunner {
                 contagem.registrarResultado(salvarUpsert(pendente.doc()));
             }
         }
-    }
-
-    /** Totais da execução, para o log final. */
-    private static final class Contagem {
-        private int novos;
-        private int atualizados;
-        private int descartados;
-        private int gemeosIgnorados;
-        private int camadas;
-
-        /** Soma o resultado da gravação; devolve se o documento foi gravado. */
-        private boolean registrarResultado(ResultadoUpsert resultado) {
-            switch (resultado) {
-                case NOVO -> novos++;
-                case ATUALIZADO -> atualizados++;
-                case IGNORADO_TIPO_DIVERGENTE -> descartados++;
-            }
-            return resultado != ResultadoUpsert.IGNORADO_TIPO_DIVERGENTE;
-        }
-    }
-
-    /** Documento montado aguardando gravação, com a origem para log. */
-    private record DocPendente(HospitalDocument doc, String origem) {
     }
 
     /**
@@ -273,10 +250,6 @@ public class SeedRunner implements ApplicationRunner {
                 + EstabelecimentoNormalizador.canonicalizar(doc.getNome()) + "|"
                 + EstabelecimentoNormalizador.canonicalizar(bairro);
     }
-
-    /** Resultado de {@link #salvarUpsert}, distinto de um simples booleano para poder
-     * contabilizar separadamente o caso em que o upsert foi recusado. */
-    private enum ResultadoUpsert { NOVO, ATUALIZADO, IGNORADO_TIPO_DIVERGENTE }
 
     /**
      * Upsert idempotente por {@code codigoCnes} (primário) ou {@code importKey} (fallback).

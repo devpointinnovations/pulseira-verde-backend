@@ -38,7 +38,7 @@ public class ConfiguracaoRemotaService {
     private final ContencaoProperties contencao;
     private final Clock clock;
 
-    private final AtomicReference<Guardada> guardada = new AtomicReference<>();
+    private final AtomicReference<ConfiguracaoGuardada> guardada = new AtomicReference<>();
 
     @Autowired
     public ConfiguracaoRemotaService(ConfiguracaoRemotaRepository repository, ContencaoProperties contencao) {
@@ -79,12 +79,12 @@ public class ConfiguracaoRemotaService {
         log.info("[Configuracao] alterada por {}: somente leitura={}, versão mínima={}.",
                 administradorId, documento.isModoSomenteLeitura(), documento.getVersaoMinimaApp());
         ConfiguracaoRemotaResponse nova = converterParaResposta(documento);
-        guardada.set(new Guardada(nova, clock.instant().plus(VALIDADE)));
+        guardada.set(ConfiguracaoGuardada.builder().configuracao(nova).expiraEm(clock.instant().plus(VALIDADE)).build());
         return obterConfiguracao();
     }
 
     private ConfiguracaoRemotaResponse obterConfiguracaoGuardada() {
-        Guardada atual = guardada.get();
+        ConfiguracaoGuardada atual = guardada.get();
         if (atual != null && clock.instant().isBefore(atual.expiraEm())) {
             return atual.configuracao();
         }
@@ -93,7 +93,7 @@ public class ConfiguracaoRemotaService {
 
     private synchronized ConfiguracaoRemotaResponse relerDoBanco() {
         Instant agora = clock.instant();
-        Guardada atual = guardada.get();
+        ConfiguracaoGuardada atual = guardada.get();
         if (atual != null && agora.isBefore(atual.expiraEm())) {
             return atual.configuracao(); // outra thread releu enquanto esta esperava
         }
@@ -106,15 +106,12 @@ public class ConfiguracaoRemotaService {
             configuracao = atual != null ? atual.configuracao() : ConfiguracaoRemotaResponse.PADRAO;
             log.warn("[Configuracao] banco indisponível; mantida a configuração anterior: {}", e.getMessage());
         }
-        guardada.set(new Guardada(configuracao, agora.plus(VALIDADE)));
+        guardada.set(ConfiguracaoGuardada.builder().configuracao(configuracao).expiraEm(agora.plus(VALIDADE)).build());
         return configuracao;
     }
 
     private static ConfiguracaoRemotaResponse converterParaResposta(ConfiguracaoRemotaDocument documento) {
         return new ConfiguracaoRemotaResponse(
                 documento.isModoSomenteLeitura(), documento.getVersaoMinimaApp(), documento.getMensagem());
-    }
-
-    private record Guardada(ConfiguracaoRemotaResponse configuracao, Instant expiraEm) {
     }
 }
