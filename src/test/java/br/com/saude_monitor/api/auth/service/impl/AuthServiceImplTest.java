@@ -21,7 +21,7 @@ import br.com.saude_monitor.api.config.security.JwtProperties;
 import br.com.saude_monitor.api.config.security.JwtService;
 import br.com.saude_monitor.api.user.document.Papel;
 import br.com.saude_monitor.api.user.document.UserDocument;
-import br.com.saude_monitor.api.user.dto.UsuarioAutenticavel;
+import br.com.saude_monitor.api.config.security.UsuarioAutenticavel;
 import br.com.saude_monitor.api.user.repository.UserRepository;
 import br.com.saude_monitor.api.user.service.UsuarioConsulta;
 import org.bson.Document;

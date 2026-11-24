@@ -10,7 +10,7 @@ import br.com.saude_monitor.api.config.exception.NaoAutorizadoException;
 import br.com.saude_monitor.api.config.ratelimit.GrupoDeLimite;
 import br.com.saude_monitor.api.config.ratelimit.RateLimitService;
 import br.com.saude_monitor.api.config.security.JwtService;
-import br.com.saude_monitor.api.user.util.EmailNormalizer;
+import br.com.saude_monitor.api.config.util.EmailNormalizer;
 import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;

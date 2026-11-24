@@ -1,6 +1,6 @@
 package br.com.saude_monitor.api.config.security;
 
-import br.com.saude_monitor.api.user.util.EmailNormalizer;
+import br.com.saude_monitor.api.config.util.EmailNormalizer;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.Ticker;

@@ -1,6 +1,5 @@
 package br.com.saude_monitor.api.config.security;
 
-import br.com.saude_monitor.api.user.dto.UsuarioAutenticavel;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.jsonwebtoken.Jwts;

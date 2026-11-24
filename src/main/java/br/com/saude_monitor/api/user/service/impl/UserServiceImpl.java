@@ -19,7 +19,7 @@ import br.com.saude_monitor.api.user.dto.UserRequest;
 import br.com.saude_monitor.api.user.dto.UserResponse;
 import br.com.saude_monitor.api.user.repository.UserRepository;
 import br.com.saude_monitor.api.user.service.UserService;
-import br.com.saude_monitor.api.user.util.EmailNormalizer;
+import br.com.saude_monitor.api.config.util.EmailNormalizer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;

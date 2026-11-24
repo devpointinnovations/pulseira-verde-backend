@@ -1,6 +1,8 @@
 package br.com.saude_monitor.api.configuracao.service;
 
 import br.com.saude_monitor.api.config.contencao.ContencaoProperties;
+import br.com.saude_monitor.api.config.contencao.FonteDoModoSomenteLeitura;
+import br.com.saude_monitor.api.config.contencao.SomenteLeitura;
 import br.com.saude_monitor.api.configuracao.document.ConfiguracaoRemotaDocument;
 import br.com.saude_monitor.api.configuracao.dto.ConfiguracaoRemotaRequest;
 import br.com.saude_monitor.api.configuracao.dto.ConfiguracaoRemotaResponse;
@@ -29,7 +31,7 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 @Slf4j
 @Service
-public class ConfiguracaoRemotaService {
+public class ConfiguracaoRemotaService implements FonteDoModoSomenteLeitura {
 
     /** Por quanto tempo cada instância reaproveita a configuração lida. */
     public static final Duration VALIDADE = Duration.ofSeconds(30);
@@ -52,6 +54,13 @@ public class ConfiguracaoRemotaService {
     }
 
     /** Configuração em vigor, com o modo somente leitura forçado por ambiente já aplicado. */
+    /** O modo somente leitura como a contenção o enxerga (inclui o forçado por configuração do ambiente). */
+    @Override
+    public SomenteLeitura somenteLeitura() {
+        ConfiguracaoRemotaResponse atual = obterConfiguracao();
+        return SomenteLeitura.builder().ativo(atual.modoSomenteLeitura()).mensagem(atual.mensagem()).build();
+    }
+
     public ConfiguracaoRemotaResponse obterConfiguracao() {
         ConfiguracaoRemotaResponse lida = obterConfiguracaoGuardada();
         if (contencao.somenteLeituraForcado() && !lida.modoSomenteLeitura()) {

@@ -1,13 +1,13 @@
 package br.com.saude_monitor.api.config.security;
 
+import br.com.saude_monitor.api.config.contencao.FonteDoModoSomenteLeitura;
+import br.com.saude_monitor.api.config.contencao.SomenteLeitura;
 import br.com.saude_monitor.api.config.contencao.ContencaoProperties;
 import br.com.saude_monitor.api.config.contencao.LimiteConcorrenciaFilter;
 import br.com.saude_monitor.api.config.contencao.ModoSomenteLeituraFilter;
 import br.com.saude_monitor.api.config.ratelimit.RateLimitFilter;
 import br.com.saude_monitor.api.config.ratelimit.RateLimitProperties;
 import br.com.saude_monitor.api.config.ratelimit.RateLimitService;
-import br.com.saude_monitor.api.configuracao.dto.ConfiguracaoRemotaResponse;
-import br.com.saude_monitor.api.configuracao.service.ConfiguracaoRemotaService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.Filter;
 import jakarta.servlet.http.Cookie;
@@ -259,8 +259,8 @@ class SecurityConfigCsrfTest {
 
         @Bean
         ModoSomenteLeituraFilter modoSomenteLeituraFilter() {
-            ConfiguracaoRemotaService configuracao = mock(ConfiguracaoRemotaService.class);
-            when(configuracao.obterConfiguracao()).thenReturn(ConfiguracaoRemotaResponse.PADRAO);
+            FonteDoModoSomenteLeitura configuracao = mock(FonteDoModoSomenteLeitura.class);
+            when(configuracao.somenteLeitura()).thenReturn(SomenteLeitura.builder().ativo(false).build());
             return new ModoSomenteLeituraFilter(configuracao, new ContencaoProperties(80, 5, 300, false), objectMapper);
         }
 

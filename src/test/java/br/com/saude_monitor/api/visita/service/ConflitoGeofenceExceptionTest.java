@@ -1,6 +1,6 @@
 package br.com.saude_monitor.api.visita.service;
 
-import br.com.saude_monitor.api.config.exception.GlobalExceptionHandler;
+import br.com.saude_monitor.api.visita.controller.VisitaExceptionHandler;
 import br.com.saude_monitor.api.visita.dto.CandidatoGeofence;
 import br.com.saude_monitor.api.visita.dto.ConflitoGeofenceResponse;
 import org.junit.jupiter.api.Test;
@@ -59,7 +59,7 @@ class ConflitoGeofenceExceptionTest {
 
     @Test
     void resposta409ContinuaTrazendoOsCandidatos() {
-        ResponseEntity<ConflitoGeofenceResponse> resposta = new GlobalExceptionHandler()
+        ResponseEntity<ConflitoGeofenceResponse> resposta = new VisitaExceptionHandler()
                 .handleConflitoGeofence(new ConflitoGeofenceException("Escolha o hospital.", List.of(HRAN, HBDF)));
 
         assertThat(resposta.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
