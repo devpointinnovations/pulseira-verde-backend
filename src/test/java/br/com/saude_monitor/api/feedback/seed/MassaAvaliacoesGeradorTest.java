@@ -40,7 +40,7 @@ class MassaAvaliacoesGeradorTest {
     }
 
     private static MassaGerada gerar() {
-        return new MassaAvaliacoesGerador(MassaAvaliacoesRunner.SEMENTE, AGORA).gerar(hospitais(), USUARIOS);
+        return new MassaAvaliacoesGerador(MassaAvaliacoesGerador.SEMENTE_PADRAO, AGORA).gerar(hospitais(), USUARIOS);
     }
 
     @Test

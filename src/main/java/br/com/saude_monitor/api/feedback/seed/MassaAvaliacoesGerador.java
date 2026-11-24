@@ -49,6 +49,9 @@ public final class MassaAvaliacoesGerador {
     private static final String ORIGEM_GEOFENCE = "GEOFENCE";
     private static final String ORIGEM_MANUAL = "MANUAL";
 
+    /** Semente padrão da carga de dev: a mesma semente gera sempre a mesma massa. */
+    public static final long SEMENTE_PADRAO = 20260929L;
+
     static final String NOTA_AUDITORIA = "Massa de dados de desenvolvimento (avaliações)";
 
     /** Janela das datas geradas, dentro dos 90 dias dos indicadores (RN-14). */
