@@ -47,4 +47,13 @@ class IndicadoresDetalheResponseTest {
 
         assertTrue(json.get("periodo").isNull());
     }
+
+    @Test
+    void indicadorIndisponivelNaoTemTendencia() {
+        JsonNode json = MAPPER.valueToTree(IndicadoresDetalheResponse.indisponivel("h1"));
+
+        assertTrue(json.get("tendenciaNota").isNull());
+        assertTrue(json.get("variacaoNota").isNull());
+        assertTrue(json.get("tendenciaPreliminar").isNull());
+    }
 }

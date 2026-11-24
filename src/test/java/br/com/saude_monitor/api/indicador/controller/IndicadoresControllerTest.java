@@ -2,6 +2,7 @@ package br.com.saude_monitor.api.indicador.controller;
 
 import br.com.saude_monitor.api.indicador.dto.IndicadoresDetalheResponse;
 import br.com.saude_monitor.api.indicador.dto.PeriodoDoIndicador;
+import br.com.saude_monitor.api.indicador.dto.TendenciaNota;
 import br.com.saude_monitor.api.indicador.service.IndicadorService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -60,6 +61,26 @@ class IndicadoresControllerTest {
                 .andExpect(jsonPath("$.nVisitas").value(34))
                 .andExpect(jsonPath("$.periodo.inicio").value("2026-05-10T00:00:00Z"))
                 .andExpect(jsonPath("$.periodo.fim").value("2026-08-07T23:59:59Z"));
+    }
+
+    @Test
+    void deveRetornarATendenciaDaNotaNoContrato() throws Exception {
+        var detalhe = IndicadoresDetalheResponse.builder()
+                .hospitalId("hosp-1")
+                .indicadoresDisponiveis(true)
+                .notaMedia(4.2)
+                .nAvaliacoes(12)
+                .tendenciaNota(TendenciaNota.SUBINDO)
+                .variacaoNota(0.4)
+                .tendenciaPreliminar(true)
+                .build();
+        when(indicadorService.obterDetalhe("hosp-1")).thenReturn(detalhe);
+
+        mockMvc.perform(get("/api/v1/hospitais/hosp-1/indicadores"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tendenciaNota").value("SUBINDO"))
+                .andExpect(jsonPath("$.variacaoNota").value(0.4))
+                .andExpect(jsonPath("$.tendenciaPreliminar").value(true));
     }
 
     @Test

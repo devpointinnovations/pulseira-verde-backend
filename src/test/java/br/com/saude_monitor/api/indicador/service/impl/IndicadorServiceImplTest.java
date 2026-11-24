@@ -1,6 +1,7 @@
 package br.com.saude_monitor.api.indicador.service.impl;
 
 import br.com.saude_monitor.api.indicador.document.IndicadorHospitalDocument;
+import br.com.saude_monitor.api.indicador.dto.TendenciaNota;
 import br.com.saude_monitor.api.indicador.repository.IndicadorHospitalRepository;
 import br.com.saude_monitor.api.indicador.service.IndicadorService;
 import br.com.saude_monitor.api.feedback.document.FeedbackDocument;
@@ -15,8 +16,11 @@ import br.com.saude_monitor.api.visita.repository.VisitaRepository;
 import br.com.saude_monitor.api.visita.service.VisitaConsulta;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Update;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -323,6 +327,136 @@ class IndicadorServiceImplTest {
         assertThat(detalhe.nVisitas()).isEqualTo(34);
         assertThat(detalhe.periodo().inicio()).isEqualTo(Instant.parse("2026-05-10T00:00:00Z"));
         assertThat(detalhe.periodo().fim()).isEqualTo(Instant.parse("2026-08-07T23:59:59Z"));
+    }
+
+    // ------------------------------------------------ E4-06 (tendência simples) -----------------------------------
+
+    private FeedbackDocument feedbackHaDias(int nota, int dias) {
+        return FeedbackDocument.builder().visitaId("v" + (++proximaVisita)).hospitalId("h1").nota(nota)
+                .criadoEm(Instant.now().minus(Duration.ofDays(dias))).build();
+    }
+
+    @Test
+    void recalcularCalculaEGravaATendenciaDaNota() {
+        List<FeedbackDocument> feedbacks = new ArrayList<>();
+        for (int i = 0; i < 6; i++) {
+            feedbacks.add(feedbackHaDias(5, 5));   // atual: 5,0 com 6 avaliações
+            feedbacks.add(feedbackHaDias(3, 45));  // anterior: 3,0 com 6 avaliações
+        }
+        feedbacks.add(feedbackHaDias(1, 75));      // fora dos dois períodos, só na nota de 90 dias
+        when(feedbackRepository.findByHospitalIdAndCriadoEmAfterAndNotaNotNull(eq("h1"), any()))
+                .thenReturn(feedbacks);
+
+        IndicadorHospitalDocument indicador = service.recalcular("h1");
+
+        assertThat(indicador.getTendenciaNota()).isEqualTo(TendenciaNota.SUBINDO);
+        assertThat(indicador.getVariacaoNota()).isEqualTo(2.0);
+        assertThat(indicador.getTendenciaPreliminar()).isTrue();
+        assertThat(indicador.getNAvaliacoes()).isEqualTo(13);
+
+        ArgumentCaptor<Update> update = ArgumentCaptor.forClass(Update.class);
+        verify(mongoTemplate).upsert(any(), update.capture(), eq(IndicadorHospitalDocument.class));
+        org.bson.Document set = (org.bson.Document) update.getValue().getUpdateObject().get("$set");
+        assertThat(set.get("tendenciaNota")).isEqualTo(TendenciaNota.SUBINDO);
+        assertThat(set.get("variacaoNota")).isEqualTo(2.0);
+        assertThat(set.get("tendenciaPreliminar")).isEqualTo(true);
+    }
+
+    @Test
+    void recalcularIgnoraNaTendenciaFeedbackDeVisitaSemProvaDePresenca() {
+        List<FeedbackDocument> feedbacks = new ArrayList<>();
+        for (int i = 0; i < 5; i++) {
+            feedbacks.add(feedbackHaDias(4, 5));
+            feedbacks.add(feedbackHaDias(4, 45));
+        }
+        FeedbackDocument semProva = feedbackHaDias(1, 5);
+        visitasNaoComprovadas.add(semProva.getVisitaId());
+        feedbacks.add(semProva);
+        when(feedbackRepository.findByHospitalIdAndCriadoEmAfterAndNotaNotNull(eq("h1"), any()))
+                .thenReturn(feedbacks);
+
+        IndicadorHospitalDocument indicador = service.recalcular("h1");
+
+        assertThat(indicador.getTendenciaNota()).isEqualTo(TendenciaNota.ESTAVEL);
+        assertThat(indicador.getVariacaoNota()).isEqualTo(0.0);
+    }
+
+    @Test
+    void recalcularSemAvaliacoesNosDoisPeriodosGravaTendenciaNula() {
+        when(feedbackRepository.findByHospitalIdAndCriadoEmAfterAndNotaNotNull(eq("h1"), any()))
+                .thenReturn(List.of(feedbackHaDias(5, 5), feedbackHaDias(4, 45)));
+
+        IndicadorHospitalDocument indicador = service.recalcular("h1");
+
+        assertThat(indicador.getTendenciaNota()).isNull();
+        assertThat(indicador.getVariacaoNota()).isNull();
+        assertThat(indicador.getTendenciaPreliminar()).isNull();
+        // Grava o nulo de propósito: a tendência antiga some quando um período perde avaliações.
+        ArgumentCaptor<Update> update = ArgumentCaptor.forClass(Update.class);
+        verify(mongoTemplate).upsert(any(), update.capture(), eq(IndicadorHospitalDocument.class));
+        org.bson.Document set = (org.bson.Document) update.getValue().getUpdateObject().get("$set");
+        assertThat(set).containsKey("tendenciaNota");
+        assertThat(set.get("tendenciaNota")).isNull();
+    }
+
+    @Test
+    void obterDetalheExpoeATendenciaQuandoOsIndicadoresEstaoDisponiveis() {
+        when(hospitalConsulta.existsById("h1")).thenReturn(true);
+        IndicadorHospitalDocument a = IndicadorHospitalDocument.builder()
+                .hospitalId("h1").notaMedia(4.0).nAvaliacoes(12)
+                .tendenciaNota(TendenciaNota.CAINDO).variacaoNota(-0.5).tendenciaPreliminar(false)
+                .atualizadoEm(Instant.now().minus(Duration.ofDays(29)))
+                .build();
+        when(indicadorRepository.findByHospitalId("h1")).thenReturn(Optional.of(a));
+
+        var detalhe = service.obterDetalhe("h1");
+
+        assertThat(detalhe.tendenciaNota()).isEqualTo(TendenciaNota.CAINDO);
+        assertThat(detalhe.variacaoNota()).isEqualTo(-0.5);
+        assertThat(detalhe.tendenciaPreliminar()).isFalse();
+    }
+
+    @Test
+    void obterDetalheOmiteATendenciaSemRecalculoHaMaisDe30Dias() {
+        // Sem recálculo há 31 dias, nenhum feedback entrou no período atual: a tendência gravada
+        // descreve períodos que já passaram.
+        when(hospitalConsulta.existsById("h1")).thenReturn(true);
+        IndicadorHospitalDocument a = IndicadorHospitalDocument.builder()
+                .hospitalId("h1").notaMedia(4.0).nAvaliacoes(12)
+                .tendenciaNota(TendenciaNota.SUBINDO).variacaoNota(0.5).tendenciaPreliminar(false)
+                .atualizadoEm(Instant.now().minus(Duration.ofDays(31)))
+                .build();
+        when(indicadorRepository.findByHospitalId("h1")).thenReturn(Optional.of(a));
+
+        var detalhe = service.obterDetalhe("h1");
+
+        assertThat(detalhe.indicadoresDisponiveis()).isTrue();
+        assertThat(detalhe.tendenciaNota()).isNull();
+        assertThat(detalhe.variacaoNota()).isNull();
+        assertThat(detalhe.tendenciaPreliminar()).isNull();
+    }
+
+    @Test
+    void tendenciaSemDataDeRecalculoNaoVale() {
+        assertThat(IndicadorServiceImpl.tendenciaAtual(null)).isFalse();
+        assertThat(IndicadorServiceImpl.tendenciaAtual(Instant.now())).isTrue();
+    }
+
+    @Test
+    void obterDetalheOmiteATendenciaQuandoNAbaixoDe5() {
+        when(hospitalConsulta.existsById("h1")).thenReturn(true);
+        IndicadorHospitalDocument a = IndicadorHospitalDocument.builder()
+                .hospitalId("h1").notaMedia(4.0).nAvaliacoes(4)
+                .tendenciaNota(TendenciaNota.SUBINDO).variacaoNota(1.0).tendenciaPreliminar(true)
+                .atualizadoEm(Instant.now())
+                .build();
+        when(indicadorRepository.findByHospitalId("h1")).thenReturn(Optional.of(a));
+
+        var detalhe = service.obterDetalhe("h1");
+
+        assertThat(detalhe.tendenciaNota()).isNull();
+        assertThat(detalhe.variacaoNota()).isNull();
+        assertThat(detalhe.tendenciaPreliminar()).isNull();
     }
 
     // ------------------------------------------------ recalcularPendentes (09/09/2026) -----------------------------
