@@ -83,7 +83,13 @@ class VisitaAtivaUnicaIntegracaoTest {
     @Test
     void checkinsSimultaneosDoMesmoUsuarioCriamUmaSoVisita() throws Exception {
         List<CheckinResponse> respostas = emParalelo(() -> visitaService.checkin(
-                new CheckinRequest(hospitalId, OrigemVisita.MANUAL, null, "aparelho-1", null), "usuario-1"));
+                CheckinRequest.builder()
+                        .hospitalId(hospitalId)
+                        .origem(OrigemVisita.MANUAL)
+                        .posicao(null)
+                        .dispositivoId("aparelho-1")
+                        .ocorridoEm(null)
+                        .build(), "usuario-1"));
 
         assertThat(ativas("usuarioId", "usuario-1")).hasSize(1);
         assertThat(respostas).filteredOn(CheckinResponse::criado).hasSize(1);
@@ -93,7 +99,13 @@ class VisitaAtivaUnicaIntegracaoTest {
     @Test
     void checkinsSimultaneosDoMesmoAparelhoAnonimoCriamUmaSoVisita() throws Exception {
         List<CheckinResponse> respostas = emParalelo(() -> visitaService.checkin(
-                new CheckinRequest(hospitalId, OrigemVisita.MANUAL, null, "aparelho-anon", null), null));
+                CheckinRequest.builder()
+                        .hospitalId(hospitalId)
+                        .origem(OrigemVisita.MANUAL)
+                        .posicao(null)
+                        .dispositivoId("aparelho-anon")
+                        .ocorridoEm(null)
+                        .build(), null));
 
         assertThat(ativas("dispositivoId", "aparelho-anon")).hasSize(1);
         assertThat(respostas).filteredOn(CheckinResponse::criado).hasSize(1);
@@ -101,9 +113,21 @@ class VisitaAtivaUnicaIntegracaoTest {
 
     @Test
     void mesmoAparelhoPodeTerVisitaAnonimaEVisitaLogada() {
-        visitaService.checkin(new CheckinRequest(hospitalId, OrigemVisita.MANUAL, null, "aparelho-2", null), null);
+        visitaService.checkin(CheckinRequest.builder()
+                .hospitalId(hospitalId)
+                .origem(OrigemVisita.MANUAL)
+                .posicao(null)
+                .dispositivoId("aparelho-2")
+                .ocorridoEm(null)
+                .build(), null);
         CheckinResponse logada = visitaService.checkin(
-                new CheckinRequest(hospitalId, OrigemVisita.MANUAL, null, "aparelho-2", null), "usuario-2");
+                CheckinRequest.builder()
+                        .hospitalId(hospitalId)
+                        .origem(OrigemVisita.MANUAL)
+                        .posicao(null)
+                        .dispositivoId("aparelho-2")
+                        .ocorridoEm(null)
+                        .build(), "usuario-2");
 
         assertThat(logada.criado()).isTrue();
         assertThat(ativas("dispositivoId", "aparelho-2")).hasSize(2);

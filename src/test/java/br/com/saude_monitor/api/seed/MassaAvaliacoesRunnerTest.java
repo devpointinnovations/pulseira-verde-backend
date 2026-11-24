@@ -1,13 +1,19 @@
-package br.com.saude_monitor.api.feedback.seed;
+package br.com.saude_monitor.api.seed;
 
 import br.com.saude_monitor.api.config.trava.TravasDeTeste;
 import br.com.saude_monitor.api.indicador.service.IndicadorService;
 import br.com.saude_monitor.api.feedback.document.FeedbackDocument;
+import br.com.saude_monitor.api.feedback.seed.MassaAvaliacoesGerador;
+import br.com.saude_monitor.api.feedback.service.FeedbackMassa;
 import br.com.saude_monitor.api.hospital.document.CategoriaEstabelecimento;
 import br.com.saude_monitor.api.hospital.document.HospitalDocument;
+import br.com.saude_monitor.api.hospital.repository.HospitalRepository;
+import br.com.saude_monitor.api.hospital.service.HospitalConsulta;
 import br.com.saude_monitor.api.user.document.Papel;
 import br.com.saude_monitor.api.user.document.UserDocument;
+import br.com.saude_monitor.api.user.service.UsuarioMassa;
 import br.com.saude_monitor.api.visita.document.VisitaDocument;
+import br.com.saude_monitor.api.visita.service.VisitaMassa;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.result.DeleteResult;
 import com.mongodb.client.result.UpdateResult;
@@ -64,7 +70,10 @@ class MassaAvaliacoesRunnerTest {
     }
 
     private MassaAvaliacoesRunner runner(String modo, String senha) {
-        return new MassaAvaliacoesRunner(mongoTemplate, passwordEncoder, indicadorService,
+        return new MassaAvaliacoesRunner(mongoTemplate, new FeedbackMassa(mongoTemplate),
+                new HospitalConsulta(mock(HospitalRepository.class), mongoTemplate),
+                new UsuarioMassa(mongoTemplate), new VisitaMassa(mongoTemplate),
+                passwordEncoder, indicadorService,
                 new MassaAvaliacoesProperties(true, modo, senha), TravasDeTeste.criarTravaLivre());
     }
 

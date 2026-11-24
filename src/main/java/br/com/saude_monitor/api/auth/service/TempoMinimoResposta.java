@@ -23,12 +23,6 @@ public class TempoMinimoResposta {
     /** Tempo mínimo de resposta. */
     public static final Duration PISO = Duration.ofSeconds(2);
 
-    /** Espera; nos testes, uma que só registra. */
-    @FunctionalInterface
-    interface Espera {
-        void esperar(Duration duracao) throws InterruptedException;
-    }
-
     private final Duration minimo;
     private final LongSupplier relogioNanos;
     private final Espera espera;

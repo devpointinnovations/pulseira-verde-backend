@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
 import java.time.Instant;
+import lombok.Builder;
 
 /**
  * Requisição de checkout (saída) de visita — {@code POST /api/v1/visitas/{id}/checkout} (§3.3).
@@ -18,6 +19,7 @@ import java.time.Instant;
  * <p>{@code dispositivoId} é obrigatório para encerrar visita anônima: é a prova de que quem
  * chama é o aparelho que fez o check-in (SEG-02). Ignorado em visita de usuário logado.</p>
  */
+@Builder
 public record CheckoutRequest(
         @Valid PosicaoDto posicao,
         Boolean gpsIndisponivel,

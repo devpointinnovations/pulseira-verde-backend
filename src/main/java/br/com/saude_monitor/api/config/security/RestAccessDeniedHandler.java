@@ -33,14 +33,14 @@ public class RestAccessDeniedHandler implements AccessDeniedHandler {
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding("UTF-8");
 
-        ApiError body = new ApiError(
-                Instant.now(),
-                HttpServletResponse.SC_FORBIDDEN,
-                "ACESSO_NEGADO",
-                "Você não possui permissão para acessar este recurso.",
-                List.<CampoInvalido>of(),
-                UUID.randomUUID().toString().replace("-", "")
-        );
+        ApiError body = ApiError.builder()
+                .timestamp(Instant.now())
+                .status(HttpServletResponse.SC_FORBIDDEN)
+                .code("ACESSO_NEGADO")
+                .message("Você não possui permissão para acessar este recurso.")
+                .details(List.<CampoInvalido>of())
+                .traceId(UUID.randomUUID().toString().replace("-", ""))
+                .build();
         objectMapper.writeValue(response.getOutputStream(), body);
     }
 }

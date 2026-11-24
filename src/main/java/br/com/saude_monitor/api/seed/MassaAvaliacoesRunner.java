@@ -1,14 +1,15 @@
-package br.com.saude_monitor.api.feedback.seed;
+package br.com.saude_monitor.api.seed;
 
 import br.com.saude_monitor.api.config.trava.TravaDistribuida;
 import br.com.saude_monitor.api.indicador.service.IndicadorService;
-import br.com.saude_monitor.api.feedback.document.FeedbackDocument;
-import br.com.saude_monitor.api.hospital.document.HospitalDocument;
-import br.com.saude_monitor.api.user.document.ConsentimentoItem;
-import br.com.saude_monitor.api.user.document.ConsentimentosDocument;
-import br.com.saude_monitor.api.user.document.Papel;
-import br.com.saude_monitor.api.user.document.UserDocument;
-import br.com.saude_monitor.api.visita.document.VisitaDocument;
+import br.com.saude_monitor.api.feedback.dto.ResumoDaMassa;
+import br.com.saude_monitor.api.feedback.seed.MassaAvaliacoesGerador;
+import br.com.saude_monitor.api.feedback.service.FeedbackMassa;
+import br.com.saude_monitor.api.hospital.dto.HospitalParaMassa;
+import br.com.saude_monitor.api.hospital.service.HospitalConsulta;
+import br.com.saude_monitor.api.user.dto.UsuarioDeMassa;
+import br.com.saude_monitor.api.user.service.UsuarioMassa;
+import br.com.saude_monitor.api.visita.service.VisitaMassa;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
@@ -16,9 +17,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Profile;
 import org.springframework.context.event.EventListener;
 import org.springframework.data.mongodb.core.MongoTemplate;
-import org.springframework.data.mongodb.core.query.Criteria;
-import org.springframework.data.mongodb.core.query.Query;
-import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
@@ -66,7 +64,7 @@ import java.util.regex.Pattern;
 public class MassaAvaliacoesRunner {
 
     /** Semente fixa: a mesma base de hospitais gera sempre a mesma distribuição. */
-    static final long SEMENTE = 20260929L;
+    static final long SEMENTE = MassaAvaliacoesGerador.SEMENTE_PADRAO;
 
     static final int QUANTIDADE_USUARIOS = 30;
 
@@ -86,7 +84,6 @@ public class MassaAvaliacoesRunner {
     /** ...e não pode indicar homologação ou produção. */
     private static final Pattern BANCO_PROIBIDO = Pattern.compile(".*(hom|prod).*");
 
-    private static final Pattern PREFIXO = Pattern.compile("^" + Pattern.quote(MassaAvaliacoesGerador.PREFIXO_ID));
 
     /** Usuário gravado primeiro em toda carga; o {@code createdAt} dele é a data da carga. */
     static final String PRIMEIRO_USUARIO = MassaAvaliacoesGerador.PREFIXO_ID + "usuario-01";
@@ -97,6 +94,10 @@ public class MassaAvaliacoesRunner {
             "Úrsula", "Vinícius", "Wanda", "Xavier", "Yara", "Zeca", "Beatriz", "Caio", "Débora", "Eduardo");
 
     private final MongoTemplate mongoTemplate;
+    private final FeedbackMassa feedbackMassa;
+    private final HospitalConsulta hospitalConsulta;
+    private final UsuarioMassa usuarioMassa;
+    private final VisitaMassa visitaMassa;
     private final PasswordEncoder passwordEncoder;
     private final IndicadorService indicadorService;
     private final MassaAvaliacoesProperties properties;
@@ -133,17 +134,16 @@ public class MassaAvaliacoesRunner {
         }
 
         Instant agora = Instant.now().truncatedTo(ChronoUnit.SECONDS);
-        Query daMassa = daMassa();
-        boolean completa = mongoTemplate.exists(daMassa, FeedbackDocument.class);
+        boolean completa = feedbackMassa.existeComPrefixo(MassaAvaliacoesGerador.PREFIXO_ID);
         boolean resto = completa
-                || mongoTemplate.exists(daMassa, UserDocument.class)
-                || mongoTemplate.exists(daMassa, VisitaDocument.class);
+                || usuarioMassa.existeComPrefixo(MassaAvaliacoesGerador.PREFIXO_ID)
+                || visitaMassa.existeComPrefixo(MassaAvaliacoesGerador.PREFIXO_ID);
 
         if (completa && !properties.recriar() && !vencida(agora)) {
             sincronizarSenha(agora);
             // Recalcula a cada boot: sem atividade recente, o job de 15 min não olharia
             // para estes hospitais e os indicadores ficariam congelados no dia da carga.
-            List<String> hospitais = mongoTemplate.findDistinct(daMassa, "hospitalId", FeedbackDocument.class, String.class);
+            List<String> hospitais = feedbackMassa.hospitaisComPrefixo(MassaAvaliacoesGerador.PREFIXO_ID);
             hospitais.forEach(indicadorService::recalcular);
             log.info("[MassaAvaliacoes] Massa já presente no banco '{}'; indicadores de {} hospitais recalculados.",
                     banco, hospitais.size());
@@ -153,103 +153,75 @@ public class MassaAvaliacoesRunner {
         // Massa pedida de novo, vencida, ou resto de uma carga interrompida: apaga só ela.
         Set<String> hospitaisAfetados = resto ? apagarMassa() : new HashSet<>();
 
-        Query ativos = Query.query(Criteria.where("ativo").is(true));
-        ativos.fields().include("_id", "categoria");
-        List<HospitalDocument> hospitais = mongoTemplate.find(ativos, HospitalDocument.class);
+        List<HospitalParaMassa> hospitais = hospitalConsulta.ativosParaMassa();
         if (hospitais.isEmpty()) {
             log.warn("[MassaAvaliacoes] Nenhum hospital ativo no banco '{}'. Carga ignorada.", banco);
             hospitaisAfetados.forEach(indicadorService::recalcular);
             return;
         }
 
-        List<UserDocument> usuarios = usuarios(agora);
-        mongoTemplate.insertAll(usuarios);
+        List<UsuarioDeMassa> usuarios = usuarios(agora);
+        usuarioMassa.inserir(usuarios);
 
-        MassaAvaliacoesGerador.Massa massa = new MassaAvaliacoesGerador(SEMENTE, agora)
-                .gerar(hospitais, usuarios.stream().map(UserDocument::getId).toList());
-        mongoTemplate.insertAll(massa.visitas());
-        // Avaliações por último: são elas que marcam a carga como completa.
-        mongoTemplate.insertAll(massa.feedbacks());
+        ResumoDaMassa massa = feedbackMassa.gerarEGravar(SEMENTE, agora, hospitais,
+                usuarios.stream().map(UsuarioDeMassa::id).toList(), visitaMassa::inserir);
 
-        hospitaisAfetados.addAll(massa.perfilPorHospital().keySet());
+        hospitaisAfetados.addAll(massa.hospitais());
         hospitaisAfetados.forEach(indicadorService::recalcular);
 
         log.info("[MassaAvaliacoes] Banco '{}': {} usuários, {} visitas e {} avaliações em {} hospitais "
                         + "({} ativos ficaram sem avaliação). Senha dos usuários {}.",
-                banco, usuarios.size(), massa.visitas().size(), massa.feedbacks().size(),
-                massa.perfilPorHospital().size(), hospitais.size() - massa.perfilPorHospital().size(),
+                banco, usuarios.size(), massa.visitas(), massa.avaliacoes(),
+                massa.hospitais().size(), hospitais.size() - massa.hospitais().size(),
                 temSenha() ? "configurada" : "NÃO configurada (sem login)");
     }
 
-    private static Query daMassa() {
-        return Query.query(Criteria.where("_id").regex(PREFIXO));
-    }
-
-    /** Carga com mais de {@link #VALIDADE_MASSA} (ou sem data) é regerada com datas atuais. */
     private boolean vencida(Instant agora) {
-        UserDocument primeiro = mongoTemplate.findById(PRIMEIRO_USUARIO, UserDocument.class);
-        return primeiro == null
-                || primeiro.getCreatedAt() == null
-                || primeiro.getCreatedAt().isBefore(agora.minus(VALIDADE_MASSA));
+        return usuarioMassa.criadoEm(PRIMEIRO_USUARIO)
+                .map(criadoEm -> criadoEm.isBefore(agora.minus(VALIDADE_MASSA)))
+                .orElse(true);
     }
 
     /** Apaga só os documentos da massa e devolve os hospitais cujo indicador precisa ser recalculado. */
     private Set<String> apagarMassa() {
-        Query daMassa = daMassa();
-        Set<String> hospitais = new HashSet<>(
-                mongoTemplate.findDistinct(daMassa, "hospitalId", FeedbackDocument.class, String.class));
-        long feedbacks = mongoTemplate.remove(daMassa, FeedbackDocument.class).getDeletedCount();
-        long visitas = mongoTemplate.remove(daMassa, VisitaDocument.class).getDeletedCount();
-        long usuarios = mongoTemplate.remove(daMassa, UserDocument.class).getDeletedCount();
+        Set<String> hospitais = new HashSet<>(feedbackMassa.hospitaisComPrefixo(MassaAvaliacoesGerador.PREFIXO_ID));
+        long feedbacks = feedbackMassa.apagarComPrefixo(MassaAvaliacoesGerador.PREFIXO_ID);
+        long visitas = visitaMassa.apagarComPrefixo(MassaAvaliacoesGerador.PREFIXO_ID);
+        long usuarios = usuarioMassa.apagarComPrefixo(MassaAvaliacoesGerador.PREFIXO_ID);
         log.info("[MassaAvaliacoes] Massa anterior removida: {} avaliações, {} visitas e {} usuários.",
                 feedbacks, visitas, usuarios);
         return hospitais;
     }
 
-    /**
-     * Mantém a senha dos usuários de teste igual à configuração a cada boot. Com senha
-     * configurada, ela é aplicada se ainda não estiver valendo (ex.: definida no serviço
-     * depois da carga). Sem senha, os usuários recebem uma senha aleatória — tirar a senha
-     * da configuração bloqueia o login de novo. Nos dois casos {@code senhaAlteradaEm}
-     * avança e os refresh tokens anteriores deixam de valer.
-     */
     private void sincronizarSenha(Instant agora) {
         String senha;
         if (temSenha()) {
-            UserDocument primeiro = mongoTemplate.findById(PRIMEIRO_USUARIO, UserDocument.class);
-            if (primeiro != null && passwordEncoder.matches(properties.senha(), primeiro.getSenhaHash())) {
+            if (usuarioMassa.senhaHash(PRIMEIRO_USUARIO)
+                    .filter(hash -> passwordEncoder.matches(properties.senha(), hash)).isPresent()) {
                 return;
             }
             senha = properties.senha();
         } else {
             senha = UUID.randomUUID().toString();
         }
-        long atualizados = mongoTemplate.updateMulti(daMassa(),
-                        new Update().set("senhaHash", passwordEncoder.encode(senha)).set("senhaAlteradaEm", agora),
-                        UserDocument.class)
-                .getModifiedCount();
+        long atualizados = usuarioMassa.trocarSenhas(
+                MassaAvaliacoesGerador.PREFIXO_ID, passwordEncoder.encode(senha), agora);
         log.info("[MassaAvaliacoes] Senha dos usuários de teste {} ({} usuários).",
                 temSenha() ? "aplicada" : "trocada por uma aleatória (sem login)", atualizados);
     }
 
-    private List<UserDocument> usuarios(Instant agora) {
+    private List<UsuarioDeMassa> usuarios(Instant agora) {
         // Um único hash para todos: BCrypt custa ~100 ms por chamada no startup.
         String senhaHash = passwordEncoder.encode(temSenha() ? properties.senha() : UUID.randomUUID().toString());
-        ConsentimentoItem aceite = ConsentimentoItem.builder().aceito(true).data(agora).versao("1.0").build();
-        List<UserDocument> usuarios = new ArrayList<>();
+        List<UsuarioDeMassa> usuarios = new ArrayList<>();
         for (int i = 1; i <= QUANTIDADE_USUARIOS; i++) {
             String numero = "%02d".formatted(i);
-            usuarios.add(UserDocument.builder()
+            usuarios.add(UsuarioDeMassa.builder()
                     .id(MassaAvaliacoesGerador.PREFIXO_ID + "usuario-" + numero)
-                    .fullName(NOMES.get((i - 1) % NOMES.size()) + " Teste " + numero)
+                    .nome(NOMES.get((i - 1) % NOMES.size()) + " Teste " + numero)
                     .email("massa.avaliacoes." + numero + "@" + DOMINIO_EMAIL)
                     .senhaHash(senhaHash)
-                    .papel(Papel.USER)
-                    .consentimentos(ConsentimentosDocument.builder().termosUso(aceite).build())
-                    .active(true)
-                    .emailVerificado(true)
-                    .createdAt(agora)
-                    .updatedAt(agora)
+                    .criadoEm(agora)
                     .build());
         }
         return usuarios;

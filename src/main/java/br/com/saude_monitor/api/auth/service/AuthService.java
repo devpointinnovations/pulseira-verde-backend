@@ -7,6 +7,7 @@ import br.com.saude_monitor.api.auth.dto.LoginRequest;
 import br.com.saude_monitor.api.auth.dto.RedefinirSenhaRequest;
 import br.com.saude_monitor.api.auth.dto.ReenviarConfirmacaoRequest;
 import br.com.saude_monitor.api.auth.dto.RefreshRequest;
+import br.com.saude_monitor.api.user.service.EnvioDeConfirmacaoDeEmail;
 import jakarta.validation.Valid;
 
 import java.util.Map;
@@ -14,7 +15,7 @@ import java.util.Map;
 /**
  * Contrato de autenticação (F0-01/F0-02) — login, renovação e encerramento de sessão JWT.
  */
-public interface AuthService {
+public interface AuthService extends EnvioDeConfirmacaoDeEmail {
 
     /** Autentica credenciais e emite access + refresh tokens. */
     AuthResponse login(@Valid LoginRequest request);
@@ -51,12 +52,6 @@ public interface AuthService {
      * deste momento (ver {@link #refresh}).
      */
     Map<String, Object> redefinirSenha(@Valid RedefinirSenhaRequest request);
-
-    /**
-     * Envia o código de 6 dígitos para confirmar o e-mail do cadastro (10/09/2026).
-     * Chamado pelo {@code UserServiceImpl} logo após criar a conta.
-     */
-    void enviarCodigoConfirmacaoEmail(String email);
 
     /** Confirma o e-mail com o código enviado no cadastro; libera o login. */
     Map<String, Object> confirmarEmail(@Valid ConfirmarEmailRequest request);

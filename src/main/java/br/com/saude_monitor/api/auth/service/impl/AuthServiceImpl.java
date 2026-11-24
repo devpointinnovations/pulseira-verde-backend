@@ -20,10 +20,9 @@ import br.com.saude_monitor.api.auth.service.TempoMinimoResposta;
 import br.com.saude_monitor.api.config.exception.EmailNaoConfirmadoException;
 import br.com.saude_monitor.api.config.exception.NaoAutorizadoException;
 import br.com.saude_monitor.api.config.security.JwtService;
-import br.com.saude_monitor.api.user.document.Papel;
-import br.com.saude_monitor.api.user.document.UserDocument;
+import br.com.saude_monitor.api.config.security.UsuarioAutenticavel;
 import br.com.saude_monitor.api.user.service.UsuarioConsulta;
-import br.com.saude_monitor.api.user.util.EmailNormalizer;
+import br.com.saude_monitor.api.config.util.EmailNormalizer;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -79,9 +78,9 @@ public class AuthServiceImpl implements AuthService {
     private volatile String hashDescartavel;
 
     /** Qualquer papel: o login e a renovação do app. */
-    private static final Predicate<UserDocument> QUALQUER_PAPEL = u -> true;
+    private static final Predicate<UsuarioAutenticavel> QUALQUER_PAPEL = u -> true;
     /** Só o papel ADMIN: as rotas de sessão do Painel Admin (ADR-013). */
-    private static final Predicate<UserDocument> SO_ADMIN = u -> u.getPapel() == Papel.ADMIN;
+    private static final Predicate<UsuarioAutenticavel> SO_ADMIN = u -> "ADMIN".equals(u.papel());
 
     @Override
     public AuthResponse login(LoginRequest request) {
@@ -98,24 +97,24 @@ public class AuthServiceImpl implements AuthService {
      * recusada logo depois da senha, com a mesma mensagem de senha errada: no login do
      * painel, uma conta de usuário comum não se distingue de um e-mail sem cadastro.
      */
-    private UserDocument autenticar(LoginRequest request, Predicate<UserDocument> papelPermitido) {
-        Optional<UserDocument> conta = usuarioConsulta.findByEmail(normalizeEmail(request.email()))
-                .filter(u -> u.getSenhaHash() != null);
+    private UsuarioAutenticavel autenticar(LoginRequest request, Predicate<UsuarioAutenticavel> papelPermitido) {
+        Optional<UsuarioAutenticavel> conta = usuarioConsulta.autenticavelPorEmail(normalizeEmail(request.email()))
+                .filter(u -> u.senhaHash() != null);
         if (conta.isEmpty()) {
             // SEG-03: sem isto, o login de e-mail inexistente respondia sem rodar o BCrypt e
             // o tempo de resposta revelava quais e-mails têm conta. Gasta o mesmo BCrypt.
             passwordEncoder.matches(request.password(), obterHashDescartavel());
             throw new NaoAutorizadoException(CREDENCIAIS_INVALIDAS);
         }
-        UserDocument user = conta
-                .filter(u -> passwordEncoder.matches(request.password(), u.getSenhaHash()))
+        UsuarioAutenticavel user = conta
+                .filter(u -> passwordEncoder.matches(request.password(), u.senhaHash()))
                 .orElseThrow(() -> new NaoAutorizadoException(CREDENCIAIS_INVALIDAS));
 
         if (!papelPermitido.test(user)) {
             throw new NaoAutorizadoException(CREDENCIAIS_INVALIDAS);
         }
 
-        if (!user.isActive()) {
+        if (!user.ativo()) {
             throw new NaoAutorizadoException("Conta desativada.");
         }
 
@@ -123,7 +122,7 @@ public class AuthServiceImpl implements AuthService {
         // erro de digitação ou inexistente nunca recebe o código de "esqueci minha senha"
         // — a conta fica sem recuperação possível. Só alcançável com credenciais corretas
         // (mesmo ponto de isActive() acima) — não abre canal de enumeração novo.
-        if (!user.isEmailVerificado()) {
+        if (!user.emailVerificado()) {
             throw new EmailNaoConfirmadoException(
                     "E-mail ainda não confirmado. Verifique sua caixa de entrada ou peça um novo código.");
         }
@@ -141,7 +140,7 @@ public class AuthServiceImpl implements AuthService {
         return renovar(refreshToken, SO_ADMIN);
     }
 
-    private AuthResponse renovar(String token, Predicate<UserDocument> papelPermitido) {
+    private AuthResponse renovar(String token, Predicate<UsuarioAutenticavel> papelPermitido) {
         if (token == null || !jwtService.isRefreshTokenValid(token)) {
             throw new NaoAutorizadoException(REFRESH_INVALIDO);
         }
@@ -153,8 +152,8 @@ public class AuthServiceImpl implements AuthService {
         }
 
         String email = jwtService.extractEmail(token);
-        UserDocument user = usuarioConsulta.findByEmail(normalizeEmail(email))
-                .filter(UserDocument::isActive)
+        UsuarioAutenticavel user = usuarioConsulta.autenticavelPorEmail(normalizeEmail(email))
+                .filter(UsuarioAutenticavel::ativo)
                 .orElseThrow(() -> new NaoAutorizadoException("Usuário não encontrado ou inativo."));
 
         // Achado de 10/09/2026: um refresh token emitido antes de uma redefinição de
@@ -170,8 +169,8 @@ public class AuthServiceImpl implements AuthService {
         // (achado do code-review). O resíduo — um token emitido de fato antes do reset
         // mas no mesmo segundo continuar aceito por até 1s — é um risco desprezível
         // perto do bug de falso-negativo que isto substitui.
-        if (user.getSenhaAlteradaEm() != null
-                && jwtService.extractIssuedAt(token).isBefore(user.getSenhaAlteradaEm().truncatedTo(ChronoUnit.SECONDS))) {
+        if (user.senhaAlteradaEm() != null
+                && jwtService.extractIssuedAt(token).isBefore(user.senhaAlteradaEm().truncatedTo(ChronoUnit.SECONDS))) {
             throw new NaoAutorizadoException(REFRESH_INVALIDO);
         }
 
@@ -193,7 +192,7 @@ public class AuthServiceImpl implements AuthService {
 
     private Map<String, Object> processarEsqueciSenha(EsqueciSenhaRequest request) {
         String email = normalizeEmail(request.email());
-        boolean existe = usuarioConsulta.findByEmail(email).filter(UserDocument::isActive).isPresent();
+        boolean existe = usuarioConsulta.autenticavelPorEmail(email).filter(UsuarioAutenticavel::ativo).isPresent();
 
         if (existe) {
             gerarEEnviarCodigo(email, Proposito.REDEFINIR_SENHA);
@@ -229,13 +228,11 @@ public class AuthServiceImpl implements AuthService {
             throw new NaoAutorizadoException(CODIGO_INVALIDO);
         }
 
-        UserDocument user = usuarioConsulta.findByEmail(email)
-                .filter(UserDocument::isActive)
+        usuarioConsulta.autenticavelPorEmail(email)
+                .filter(UsuarioAutenticavel::ativo)
                 .orElseThrow(() -> new NaoAutorizadoException(CODIGO_INVALIDO));
 
-        user.setSenhaHash(passwordEncoder.encode(request.novaSenha()));
-        user.setSenhaAlteradaEm(Instant.now());
-        usuarioConsulta.save(user);
+        usuarioConsulta.definirSenha(email, passwordEncoder.encode(request.novaSenha()), Instant.now());
 
         codigoVerificacaoRepository.deleteByEmailAndProposito(email, Proposito.REDEFINIR_SENHA);
         logger.info("Senha redefinida via código (esqueci minha senha) para email={}", email);
@@ -277,12 +274,11 @@ public class AuthServiceImpl implements AuthService {
             throw new NaoAutorizadoException(CODIGO_INVALIDO);
         }
 
-        UserDocument user = usuarioConsulta.findByEmail(email)
-                .filter(UserDocument::isActive)
+        usuarioConsulta.autenticavelPorEmail(email)
+                .filter(UsuarioAutenticavel::ativo)
                 .orElseThrow(() -> new NaoAutorizadoException(CODIGO_INVALIDO));
 
-        user.setEmailVerificado(true);
-        usuarioConsulta.save(user);
+        usuarioConsulta.confirmarEmail(email);
 
         codigoVerificacaoRepository.deleteByEmailAndProposito(email, Proposito.CONFIRMAR_EMAIL);
         logger.info("E-mail confirmado no cadastro para email={}", email);
@@ -300,9 +296,9 @@ public class AuthServiceImpl implements AuthService {
 
     private Map<String, Object> processarReenvioConfirmacao(ReenviarConfirmacaoRequest request) {
         String email = normalizeEmail(request.email());
-        boolean enviar = usuarioConsulta.findByEmail(email)
-                .filter(UserDocument::isActive)
-                .filter(u -> !u.isEmailVerificado())
+        boolean enviar = usuarioConsulta.autenticavelPorEmail(email)
+                .filter(UsuarioAutenticavel::ativo)
+                .filter(u -> !u.emailVerificado())
                 .isPresent();
 
         if (enviar) {
@@ -422,22 +418,22 @@ public class AuthServiceImpl implements AuthService {
         }
     }
 
-    private AuthResponse emitirTokens(UserDocument user) {
-        return new AuthResponse(
-                jwtService.generateAccessToken(user),
-                jwtService.generateRefreshToken(user),
-                jwtService.accessExpirationSeconds(),
-                toUsuarioDto(user)
-        );
+    private AuthResponse emitirTokens(UsuarioAutenticavel user) {
+        return AuthResponse.builder()
+                .accessToken(jwtService.generateAccessToken(user))
+                .refreshToken(jwtService.generateRefreshToken(user))
+                .expiraEm(jwtService.accessExpirationSeconds())
+                .usuario(toUsuarioDto(user))
+                .build();
     }
 
-    private UsuarioDto toUsuarioDto(UserDocument user) {
-        return new UsuarioDto(
-                user.getId(),
-                user.getFullName(),
-                user.getEmail(),
-                user.getPapel() == null ? "USER" : user.getPapel().name()
-        );
+    private UsuarioDto toUsuarioDto(UsuarioAutenticavel user) {
+        return UsuarioDto.builder()
+                .id(user.id())
+                .nome(user.nomeCompleto())
+                .email(user.email())
+                .papel(user.papel())
+                .build();
     }
 
     private String normalizeEmail(String email) {

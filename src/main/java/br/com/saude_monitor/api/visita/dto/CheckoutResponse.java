@@ -3,7 +3,9 @@ package br.com.saude_monitor.api.visita.dto;
 import br.com.saude_monitor.api.visita.document.StatusVisita;
 
 import java.time.Instant;
+import lombok.Builder;
 
+@Builder
 public record CheckoutResponse(
         String id,
         Instant saida,

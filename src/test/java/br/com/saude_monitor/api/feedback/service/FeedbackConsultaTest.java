@@ -1,6 +1,7 @@
 package br.com.saude_monitor.api.feedback.service;
 
 import br.com.saude_monitor.api.feedback.document.FeedbackDocument;
+import br.com.saude_monitor.api.feedback.dto.FeedbackParaIndicador;
 import br.com.saude_monitor.api.feedback.repository.FeedbackRepository;
 import org.bson.Document;
 import org.junit.jupiter.api.Test;
@@ -11,6 +12,7 @@ import org.springframework.data.mongodb.core.query.UpdateDefinition;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -67,18 +69,24 @@ class FeedbackConsultaTest {
     }
 
     @Test
-    void consultaPorHospitalRepassaHospitalEInstante() {
-        when(repository.findByHospitalIdAndCriadoEmAfterAndNotaNotNull("h1", DESDE)).thenReturn(List.of(feedback));
+    void comNotaDesdeDevolveSoAVisitaANotaEACriacao() {
+        Instant criadoEm = DESDE.plusSeconds(60);
+        when(repository.findByHospitalIdAndCriadoEmAfterAndNotaNotNull("h1", DESDE)).thenReturn(List.of(
+                FeedbackDocument.builder().visitaId("v1").hospitalId("h1").nota(4).comentario("ótimo")
+                        .usuarioId("u1").criadoEm(criadoEm).build()));
 
-        assertEquals(List.of(feedback), consulta.findByHospitalIdAndCriadoEmAfterAndNotaNotNull("h1", DESDE));
+        assertEquals(List.of(FeedbackParaIndicador.builder().visitaId("v1").nota(4).criadoEm(criadoEm).build()),
+                consulta.comNotaDesde("h1", DESDE));
     }
 
     @Test
-    void consultasPorCriacaoEEdicaoDelegamAoRepository() {
-        when(repository.findByCriadoEmAfter(DESDE)).thenReturn(List.of(feedback));
-        when(repository.findByEditadoEmAfter(DESDE)).thenReturn(List.of());
+    void hospitaisComAtividadeDesdeJuntaFeedbackCriadoEEditado() {
+        when(repository.findByCriadoEmAfter(DESDE)).thenReturn(List.of(
+                FeedbackDocument.builder().hospitalId("h1").build()));
+        when(repository.findByEditadoEmAfter(DESDE)).thenReturn(List.of(
+                FeedbackDocument.builder().hospitalId("h2").build(),
+                FeedbackDocument.builder().hospitalId("h1").build()));
 
-        assertEquals(List.of(feedback), consulta.findByCriadoEmAfter(DESDE));
-        assertEquals(List.of(), consulta.findByEditadoEmAfter(DESDE));
+        assertEquals(Set.of("h1", "h2"), consulta.hospitaisComAtividadeDesde(DESDE));
     }
 }

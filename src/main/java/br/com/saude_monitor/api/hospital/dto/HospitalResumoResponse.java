@@ -2,6 +2,7 @@ package br.com.saude_monitor.api.hospital.dto;
 
 import br.com.saude_monitor.api.hospital.document.CategoriaEstabelecimento;
 import br.com.saude_monitor.api.hospital.document.TipoEstabelecimento;
+import lombok.Builder;
 
 /**
  * Resumo do hospital exposto na listagem pública {@code GET /api/v1/hospitais}.
@@ -21,6 +22,7 @@ import br.com.saude_monitor.api.hospital.document.TipoEstabelecimento;
  * point-in-polygon, não um campo do cadastro — pode ser {@code null} (ver
  * {@code HospitalDocument#regiaoAdministrativa}).</p>
  */
+@Builder
 public record HospitalResumoResponse(
         String id,
         String nome,

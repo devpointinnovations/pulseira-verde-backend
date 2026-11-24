@@ -4,7 +4,6 @@ import br.com.saude_monitor.api.config.trava.TravaDistribuida;
 import br.com.saude_monitor.api.configuracao.service.ConfiguracaoRemotaService;
 import br.com.saude_monitor.api.feedback.service.FeedbackSemRespostaJob;
 import br.com.saude_monitor.api.indicador.service.IndicadorHospitalJob;
-import br.com.saude_monitor.api.visita.service.RetencaoDadosPessoaisJob;
 import br.com.saude_monitor.api.visita.service.VisitaExpiracaoJob;
 import br.com.saude_monitor.api.visita.service.VisitaGpsInterrompidoJob;
 import org.junit.jupiter.api.Test;
@@ -54,7 +53,7 @@ class ExecutorJobsTest {
     void executaCadaJobPeloNomeSobATravaDoProprioJob() {
         simularTravaLivre();
 
-        assertThat(executor.executar("indicadores")).contains(ExecutorJobs.Resultado.EXECUTADO);
+        assertThat(executor.executar("indicadores")).contains(ResultadoExecucao.EXECUTADO);
         executor.executar("expiracao-visitas");
         executor.executar("gps-interrompido");
         executor.executar("feedback-sem-resposta");
@@ -72,7 +71,7 @@ class ExecutorJobsTest {
     void pulaQuandoOutraInstanciaEstaComAJob() {
         when(trava.executar(anyString(), any(Duration.class), any(Runnable.class))).thenReturn(false);
 
-        assertThat(executor.executar("indicadores")).contains(ExecutorJobs.Resultado.PULADO);
+        assertThat(executor.executar("indicadores")).contains(ResultadoExecucao.PULADO);
         verify(indicadores, never()).executar();
     }
 
@@ -80,7 +79,7 @@ class ExecutorJobsTest {
     void pulaNoModoSomenteLeituraSemPegarATrava() {
         when(configuracao.isModoSomenteLeitura()).thenReturn(true);
 
-        assertThat(executor.executar("retencao-dados")).contains(ExecutorJobs.Resultado.PULADO);
+        assertThat(executor.executar("retencao-dados")).contains(ResultadoExecucao.PULADO);
         verifyNoInteractions(trava, retencao);
     }
 

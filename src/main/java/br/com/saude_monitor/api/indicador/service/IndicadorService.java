@@ -1,11 +1,9 @@
 package br.com.saude_monitor.api.indicador.service;
 
+import br.com.saude_monitor.api.hospital.service.IndicadoresDosHospitais;
 import br.com.saude_monitor.api.indicador.dto.IndicadoresDetalheResponse;
 import br.com.saude_monitor.api.indicador.document.IndicadorHospitalDocument;
-import br.com.saude_monitor.api.hospital.dto.IndicadoresResponse;
 
-import java.util.Collection;
-import java.util.List;
 
 /**
  * Contrato do serviço de agregação de indicadores públicos (Épico 04 / F-06).
@@ -15,19 +13,13 @@ import java.util.List;
  * enriquecida do endpoint dedicado (§3.5), e suportar o recálculo por evento e por
  * job (RN-18).</p>
  */
-public interface IndicadorService {
+public interface IndicadorService extends IndicadoresDosHospitais {
 
     /**
      * Recalcula e persiste (upsert) o indicador de um único hospital (RN-18 — evento
      * disparado após novo feedback, e job de 15min).
      */
     IndicadorHospitalDocument recalcular(String hospitalId);
-
-    /**
-     * Indicadores embutidos (compactos) para a listagem/detalhe público de hospitais —
-     * conjunto de ids em lote para evitar N+1. Sempre retorna um valor por id.
-     */
-    List<IndicadoresResponse> mapaIndicadores(Collection<String> hospitalIds);
 
     /**
      * Indicadores enriquecidos do endpoint dedicado {@code GET /hospitais/{id}/indicadores}

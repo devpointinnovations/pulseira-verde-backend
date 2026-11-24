@@ -1,6 +1,6 @@
 package br.com.saude_monitor.api.visita.service;
 
-import br.com.saude_monitor.api.config.exception.GlobalExceptionHandler;
+import br.com.saude_monitor.api.visita.controller.VisitaExceptionHandler;
 import br.com.saude_monitor.api.visita.dto.CandidatoGeofence;
 import br.com.saude_monitor.api.visita.dto.ConflitoGeofenceResponse;
 import org.junit.jupiter.api.Test;
@@ -22,8 +22,12 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class ConflitoGeofenceExceptionTest {
 
-    private static final CandidatoGeofence HRAN = new CandidatoGeofence("h-1", "Hospital Regional da Asa Norte", 42.0);
-    private static final CandidatoGeofence HBDF = new CandidatoGeofence("h-2", "Hospital de Base", 47.5);
+    private static final CandidatoGeofence HRAN = CandidatoGeofence.builder()
+            .hospitalId("h-1")
+            .nome("Hospital Regional da Asa Norte")
+            .distanciaMetros(42.0)
+            .build();
+    private static final CandidatoGeofence HBDF = CandidatoGeofence.builder().hospitalId("h-2").nome("Hospital de Base").distanciaMetros(47.5).build();
 
     @Test
     void serializaEDesserializaPreservandoOsCandidatos() throws Exception {
@@ -59,7 +63,7 @@ class ConflitoGeofenceExceptionTest {
 
     @Test
     void resposta409ContinuaTrazendoOsCandidatos() {
-        ResponseEntity<ConflitoGeofenceResponse> resposta = new GlobalExceptionHandler()
+        ResponseEntity<ConflitoGeofenceResponse> resposta = new VisitaExceptionHandler()
                 .handleConflitoGeofence(new ConflitoGeofenceException("Escolha o hospital.", List.of(HRAN, HBDF)));
 
         assertThat(resposta.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);

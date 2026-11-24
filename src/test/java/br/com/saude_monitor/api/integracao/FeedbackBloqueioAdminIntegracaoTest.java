@@ -4,6 +4,7 @@ import br.com.saude_monitor.api.config.security.JwtService;
 import br.com.saude_monitor.api.feedback.repository.FeedbackRepository;
 import br.com.saude_monitor.api.user.document.Papel;
 import br.com.saude_monitor.api.user.document.UserDocument;
+import br.com.saude_monitor.api.config.security.UsuarioAutenticavel;
 import br.com.saude_monitor.api.user.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -67,7 +68,7 @@ class FeedbackBloqueioAdminIntegracaoTest extends IntegracaoTestBase {
                 .active(true)
                 .emailVerificado(true)
                 .build());
-        return jwtService.generateAccessToken(usuario);
+        return jwtService.generateAccessToken(UsuarioAutenticavel.builder().email(usuario.getEmail()).build());
     }
 
     private record FeedbackCriado(String visitaId, String feedbackId) {

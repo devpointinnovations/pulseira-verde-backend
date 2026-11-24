@@ -2,7 +2,7 @@ package br.com.saude_monitor.api.integracao;
 
 import br.com.saude_monitor.api.indicador.document.IndicadorHospitalDocument;
 import br.com.saude_monitor.api.feedback.document.FeedbackDocument;
-import br.com.saude_monitor.api.feedback.seed.MassaAvaliacoesRunner;
+import br.com.saude_monitor.api.seed.MassaAvaliacoesRunner;
 import br.com.saude_monitor.api.user.document.UserDocument;
 import br.com.saude_monitor.api.visita.document.VisitaDocument;
 import com.fasterxml.jackson.databind.JsonNode;

@@ -4,7 +4,6 @@ import br.com.saude_monitor.api.config.trava.TravaDistribuida;
 import br.com.saude_monitor.api.configuracao.service.ConfiguracaoRemotaService;
 import br.com.saude_monitor.api.feedback.service.FeedbackSemRespostaJob;
 import br.com.saude_monitor.api.indicador.service.IndicadorHospitalJob;
-import br.com.saude_monitor.api.visita.service.RetencaoDadosPessoaisJob;
 import br.com.saude_monitor.api.visita.service.VisitaExpiracaoJob;
 import br.com.saude_monitor.api.visita.service.VisitaGpsInterrompidoJob;
 import lombok.extern.slf4j.Slf4j;
@@ -41,9 +40,6 @@ public class ExecutorJobs {
     /** Validade da trava: menor que o intervalo de 15 min, para a execução seguinte nunca ser pulada por trava velha. */
     static final Duration VALIDADE_TRAVA = Duration.ofMinutes(14);
 
-    /** Resultado de um pedido de execução. */
-    public enum Resultado { EXECUTADO, PULADO }
-
     private final TravaDistribuida trava;
     private final ConfiguracaoRemotaService configuracaoRemota;
     private final Map<String, Runnable> jobs = new LinkedHashMap<>();
@@ -76,20 +72,20 @@ public class ExecutorJobs {
      * @throws RuntimeException o erro do próprio job, depois de registrado em log, para quem
      *                          disparou (o Cloud Scheduler) tentar de novo
      */
-    public Optional<Resultado> executar(String nome) {
+    public Optional<ResultadoExecucao> executar(String nome) {
         Runnable job = jobs.get(nome);
         if (job == null) {
             return Optional.empty();
         }
         if (configuracaoRemota.isModoSomenteLeitura()) {
             log.info("[Job] {} pulado: modo somente leitura ligado.", nome);
-            return Optional.of(Resultado.PULADO);
+            return Optional.of(ResultadoExecucao.PULADO);
         }
         boolean rodou = trava.executar(PREFIXO_TRAVA + nome, VALIDADE_TRAVA, () -> executarMedindoTempo(nome, job));
         if (!rodou) {
             log.info("[Job] {} pulado: outra instância está executando.", nome);
         }
-        return Optional.of(rodou ? Resultado.EXECUTADO : Resultado.PULADO);
+        return Optional.of(rodou ? ResultadoExecucao.EXECUTADO : ResultadoExecucao.PULADO);
     }
 
     private static void executarMedindoTempo(String nome, Runnable job) {

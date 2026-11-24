@@ -37,14 +37,22 @@ class AuthControllerTest {
     private final AuthService authService = new AuthService() {
         @Override
         public AuthResponse login(LoginRequest request) {
-            return new AuthResponse("access-token", "refresh-token", 900,
-                    new UsuarioDto("1", "Marina Souza", request.email(), "USER"));
+            return AuthResponse.builder()
+                    .accessToken("access-token")
+                    .refreshToken("refresh-token")
+                    .expiraEm(900)
+                    .usuario(UsuarioDto.builder().id("1").nome("Marina Souza").email(request.email()).papel("USER").build())
+                    .build();
         }
 
         @Override
         public AuthResponse refresh(RefreshRequest request) {
-            return new AuthResponse("new-access", "new-refresh", 900,
-                    new UsuarioDto("1", "Marina Souza", "marina@email.com", "USER"));
+            return AuthResponse.builder()
+                    .accessToken("new-access")
+                    .refreshToken("new-refresh")
+                    .expiraEm(900)
+                    .usuario(UsuarioDto.builder().id("1").nome("Marina Souza").email("marina@email.com").papel("USER").build())
+                    .build();
         }
 
         @Override
@@ -92,9 +100,17 @@ class AuthControllerTest {
     private final UserService userService = new UserService() {
         @Override
         public UserResponse saveUser(UserRequest request) {
-            return new UserResponse(true, "Usuário cadastrado com sucesso", "u1",
-                    request.fullName(), request.email(), request.phone(),
-                    true, Instant.now(), Instant.now());
+            return UserResponse.builder()
+                    .success(true)
+                    .message("Usuário cadastrado com sucesso")
+                    .id("u1")
+                    .fullName(request.fullName())
+                    .email(request.email())
+                    .phone(request.phone())
+                    .active(true)
+                    .createdAt(Instant.now())
+                    .updatedAt(Instant.now())
+                    .build();
         }
 
         @Override

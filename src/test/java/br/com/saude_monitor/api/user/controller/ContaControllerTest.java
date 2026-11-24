@@ -7,6 +7,8 @@ import br.com.saude_monitor.api.feedback.dto.FeedbackResponse;
 import br.com.saude_monitor.api.feedback.service.FeedbackService;
 import br.com.saude_monitor.api.hospital.dto.PageResponse;
 import br.com.saude_monitor.api.user.document.UserDocument;
+import br.com.saude_monitor.api.user.dto.FinalidadeResponse;
+import br.com.saude_monitor.api.user.repository.UserRepository;
 import br.com.saude_monitor.api.user.service.UsuarioConsulta;
 import br.com.saude_monitor.api.user.service.ExportacaoPdfService;
 import br.com.saude_monitor.api.user.service.UserService;
@@ -56,12 +58,13 @@ class ContaControllerTest {
         public br.com.saude_monitor.api.user.dto.ConsentimentosResponse atualizarConsentimentos(
                 String usuarioId, br.com.saude_monitor.api.user.dto.AtualizarConsentimentosRequest request) {
             var agora = java.time.Instant.parse("2026-09-01T12:00:00Z");
-            return new br.com.saude_monitor.api.user.dto.ConsentimentosResponse(
-                    new br.com.saude_monitor.api.user.dto.ConsentimentosResponse.Finalidade(
-                            Boolean.TRUE.equals(request.localizacao()), agora, "1.0"),
-                    new br.com.saude_monitor.api.user.dto.ConsentimentosResponse.Finalidade(
-                            Boolean.TRUE.equals(request.notificacoes()), agora, "1.0"),
-                    new br.com.saude_monitor.api.user.dto.ConsentimentosResponse.Finalidade(true, agora, "1.0"));
+            return br.com.saude_monitor.api.user.dto.ConsentimentosResponse.builder()
+                    .localizacao(FinalidadeResponse.builder()
+                            .aceito(Boolean.TRUE.equals(request.localizacao())).data(agora).versao("1.0").build())
+                    .notificacoes(FinalidadeResponse.builder()
+                            .aceito(Boolean.TRUE.equals(request.notificacoes())).data(agora).versao("1.0").build())
+                    .termosUso(FinalidadeResponse.builder().aceito(true).data(agora).versao("1.0").build())
+                    .build();
         }
 
         @Override
@@ -82,8 +85,8 @@ class ContaControllerTest {
 
     @BeforeEach
     void setup() {
-        UsuarioConsulta usuarioConsulta = mock(UsuarioConsulta.class);
-        when(usuarioConsulta.findByEmail("marina@email.com"))
+        UserRepository userRepository = mock(UserRepository.class);
+        when(userRepository.findByEmail("marina@email.com"))
                 .thenReturn(Optional.of(UserDocument.builder().id("u1").build()));
 
         VisitaService visitaService = mock(VisitaService.class);
@@ -93,10 +96,13 @@ class ContaControllerTest {
         FeedbackService feedbackService = mock(FeedbackService.class);
         when(feedbackService.historico("u1", 0, 20))
                 .thenReturn(PageResponse.of(List.<FeedbackResponse>of(), 0, 20, 0));
-        when(feedbackService.pendentes("u1")).thenReturn(List.of(new FeedbackPendenteResponse(
-                "v1", "h1", "HRAN",
-                java.time.Instant.parse("2026-10-04T10:00:00Z"),
-                java.time.Instant.parse("2026-10-05T10:00:00Z"))));
+        when(feedbackService.pendentes("u1")).thenReturn(List.of(FeedbackPendenteResponse.builder()
+                .visitaId("v1")
+                .hospitalId("h1")
+                .hospitalNome("HRAN")
+                .saida(java.time.Instant.parse("2026-10-04T10:00:00Z"))
+                .prazo(java.time.Instant.parse("2026-10-05T10:00:00Z"))
+                .build()));
 
         // O conteúdo do documento é coberto em ExportacaoPdfServiceImplTest;
         // aqui interessa apenas o contrato HTTP do endpoint.
@@ -110,7 +116,7 @@ class ContaControllerTest {
         validator.afterPropertiesSet();
 
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new ContaController(userService, new AutenticacaoHelper(usuarioConsulta),
+                .standaloneSetup(new ContaController(userService, new AutenticacaoHelper(new UsuarioConsulta(userRepository)),
                         visitaService, feedbackService, exportacaoPdfService))
                 .setValidator(validator)
                 .setControllerAdvice(new GlobalExceptionHandler())

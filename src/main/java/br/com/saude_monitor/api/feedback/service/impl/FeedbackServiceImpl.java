@@ -1,6 +1,7 @@
 package br.com.saude_monitor.api.feedback.service.impl;
 
-import br.com.saude_monitor.api.indicador.event.FeedbackSalvoEvent;
+import br.com.saude_monitor.api.hospital.dto.HospitalResumo;
+import br.com.saude_monitor.api.feedback.event.FeedbackSalvoEvent;
 import br.com.saude_monitor.api.config.exception.AcessoNegadoException;
 import br.com.saude_monitor.api.config.exception.ConflitoException;
 import br.com.saude_monitor.api.config.exception.RecursoNaoEncontradoException;
@@ -13,12 +14,10 @@ import br.com.saude_monitor.api.feedback.dto.FeedbackRequest;
 import br.com.saude_monitor.api.feedback.dto.FeedbackResponse;
 import br.com.saude_monitor.api.feedback.repository.FeedbackRepository;
 import br.com.saude_monitor.api.feedback.service.FeedbackService;
-import br.com.saude_monitor.api.hospital.document.HospitalDocument;
 import br.com.saude_monitor.api.hospital.dto.PageResponse;
 import br.com.saude_monitor.api.hospital.service.HospitalConsulta;
-import br.com.saude_monitor.api.visita.document.StatusVisita;
-import br.com.saude_monitor.api.visita.document.VisitaDocument;
-import br.com.saude_monitor.api.visita.service.VisitaDono;
+import br.com.saude_monitor.api.visita.dto.VisitaParaAvaliacao;
+import br.com.saude_monitor.api.visita.dto.VisitaParaFeedback;
 import br.com.saude_monitor.api.visita.service.VisitaService;
 import br.com.saude_monitor.api.visita.service.VisitaConsulta;
 import lombok.RequiredArgsConstructor;
@@ -75,9 +74,6 @@ public class FeedbackServiceImpl implements FeedbackService {
      * que o backend registra quando o celular descarrega ou desliga dentro do hospital
      * (RN-06): o usuário esteve lá e foi atendido, só o aparelho é que parou de responder.
      */
-    private static final List<StatusVisita> STATUS_AVALIAVEIS =
-            List.of(StatusVisita.FINALIZADA, StatusVisita.GPS_INTERROMPIDO);
-
     private final FeedbackRepository feedbackRepository;
     private final VisitaConsulta visitaConsulta;
     private final HospitalConsulta hospitalConsulta;
@@ -86,7 +82,7 @@ public class FeedbackServiceImpl implements FeedbackService {
 
     @Override
     public FeedbackResponse criar(FeedbackRequest request, String usuarioId) {
-        VisitaDocument visita = obterVisitaAvaliavel(request.visitaId(), usuarioId, request.dispositivoId());
+        VisitaParaAvaliacao visita = obterVisitaAvaliavel(request.visitaId(), usuarioId, request.dispositivoId());
 
         if (feedbackRepository.existsByVisitaId(request.visitaId())) {
             throw new ConflitoException("Você já avaliou esta visita.");
@@ -96,9 +92,9 @@ public class FeedbackServiceImpl implements FeedbackService {
 
         Instant agora = Instant.now();
         FeedbackDocument feedback = FeedbackDocument.builder()
-                .visitaId(visita.getId())
+                .visitaId(visita.id())
                 .usuarioId(usuarioId)
-                .hospitalId(visita.getHospitalId())
+                .hospitalId(visita.hospitalId())
                 .especialidadeProcurada(request.especialidadeProcurada())
                 .foiAtendido(request.foiAtendido())
                 .motivoNaoAtendido(normalizarMotivo(request.motivoNaoAtendido()))
@@ -191,12 +187,11 @@ public class FeedbackServiceImpl implements FeedbackService {
 
     @Override
     public List<FeedbackPendenteResponse> pendentes(String usuarioId) {
-        List<VisitaDocument> candidatas = visitaConsulta
-                .findByUsuarioIdAndStatusInAndSaidaAfterOrderBySaidaDesc(
-                        usuarioId, STATUS_AVALIAVEIS, Instant.now().minus(JANELA_RESPOSTA))
+        List<VisitaParaFeedback> candidatas = visitaConsulta
+                .avaliaveisDoUsuarioDesde(usuarioId, Instant.now().minus(JANELA_RESPOSTA))
                 .stream()
-                .filter(v -> v.getDuracaoMinutos() == null
-                        || v.getDuracaoMinutos() >= DURACAO_MINIMA_FEEDBACK_MIN)
+                .filter(v -> v.duracaoMinutos() == null
+                        || v.duracaoMinutos() >= DURACAO_MINIMA_FEEDBACK_MIN)
                 .toList();
         if (candidatas.isEmpty()) {
             return List.of();
@@ -204,51 +199,46 @@ public class FeedbackServiceImpl implements FeedbackService {
 
         // Em lote (sem N+1), como no job de SEM_FEEDBACK abaixo.
         Set<String> comFeedback = feedbackRepository
-                .findByVisitaIdIn(candidatas.stream().map(VisitaDocument::getId).toList()).stream()
+                .findByVisitaIdIn(candidatas.stream().map(VisitaParaFeedback::id).toList()).stream()
                 .map(FeedbackDocument::getVisitaId)
                 .collect(Collectors.toSet());
-        List<VisitaDocument> semFeedback = candidatas.stream()
-                .filter(v -> !comFeedback.contains(v.getId()))
+        List<VisitaParaFeedback> semFeedback = candidatas.stream()
+                .filter(v -> !comFeedback.contains(v.id()))
                 .toList();
 
         Map<String, String> nomes = obterNomesHospitais(semFeedback.stream()
-                .map(VisitaDocument::getHospitalId).toList());
+                .map(VisitaParaFeedback::hospitalId).toList());
 
         return semFeedback.stream()
-                .map(v -> new FeedbackPendenteResponse(
-                        v.getId(), v.getHospitalId(), nomes.get(v.getHospitalId()),
-                        v.getSaida(), v.getSaida().plus(JANELA_RESPOSTA)))
+                .map(v -> FeedbackPendenteResponse.builder()
+                        .visitaId(v.id())
+                        .hospitalId(v.hospitalId())
+                        .hospitalNome(nomes.get(v.hospitalId()))
+                        .saida(v.saida())
+                        .prazo(v.saida().plus(JANELA_RESPOSTA))
+                        .build())
                 .toList();
     }
 
     @Override
     public void processarSemResposta() {
         Instant limite = Instant.now().minus(JANELA_RESPOSTA);
-        List<VisitaDocument> encerradas = visitaConsulta
-                .findByStatusAndSaidaBefore(StatusVisita.FINALIZADA, limite);
+        List<String> visitaIds = visitaConsulta.idsFinalizadasAntesDe(limite);
 
         // Antes chamava existsByVisitaId dentro do loop (N+1) e salvava a lista inteira,
         // inclusive as visitas que já tinham feedback e não foram alteradas. Agora busca
         // o feedback de todas de uma vez e só salva quem de fato mudou de status.
-        List<String> visitaIds = encerradas.stream().map(VisitaDocument::getId).toList();
         Set<String> comFeedback = feedbackRepository.findByVisitaIdIn(visitaIds).stream()
                 .map(FeedbackDocument::getVisitaId)
                 .collect(Collectors.toSet());
 
-        List<String> semFeedback = encerradas.stream()
-                .map(VisitaDocument::getId)
+        List<String> semFeedback = visitaIds.stream()
                 .filter(id -> !comFeedback.contains(id))
                 .toList();
         if (semFeedback.isEmpty()) {
             return;
         }
-        // Update só do status, em vez de `saveAll` dos documentos lidos: regravar a visita
-        // inteira podia devolver conta, aparelho ou pontos de GPS apagados no meio do caminho
-        // pela retenção (DAD-01).
-        mongoTemplate.updateMulti(
-                new Query(Criteria.where("_id").in(semFeedback).and("status").is(StatusVisita.FINALIZADA)),
-                new Update().set("status", StatusVisita.SEM_FEEDBACK),
-                VisitaDocument.class);
+        visitaConsulta.marcarSemFeedback(semFeedback);
     }
 
     @Override
@@ -268,24 +258,24 @@ public class FeedbackServiceImpl implements FeedbackService {
      * responde 404, o mesmo que a visita já marcada {@code SEM_FEEDBACK} pelo job recebe,
      * para o app tratar os dois casos como "não está mais disponível".
      */
-    private VisitaDocument obterVisitaAvaliavel(String visitaId, String usuarioId, String dispositivoId) {
-        VisitaDocument visita = visitaConsulta.findById(visitaId)
+    private VisitaParaAvaliacao obterVisitaAvaliavel(String visitaId, String usuarioId, String dispositivoId) {
+        VisitaParaAvaliacao visita = visitaConsulta.paraAvaliacao(visitaId, usuarioId, dispositivoId)
                 .orElseThrow(() -> new RecursoNaoEncontradoException(
                         "Visita não encontrada para o id informado."));
         // SEG-02: só quem fez a visita avalia. 403, como no BOLA de checkout (F-02). Vem
         // antes das regras de status e de janela para não contar a estranhos se a visita
         // está em andamento, encerrada ou já avaliada.
-        if (!VisitaDono.isDonoDaVisita(visita, usuarioId, dispositivoId)) {
+        if (!visita.dono()) {
             throw new AcessoNegadoException("Visita não pertence ao usuário ou aparelho informado.");
         }
-        if (!STATUS_AVALIAVEIS.contains(visita.getStatus())) {
+        if (!visita.avaliavel()) {
             throw new RecursoNaoEncontradoException(
                     "O feedback só pode ser enviado após a visita ser encerrada.");
         }
         // Sem este corte, entre o fim da janela e a próxima passada do job (15 min) — e
         // sempre, para GPS_INTERROMPIDO, que o job não toca — a visita seguia avaliável.
-        if (visita.getSaida() != null
-                && Duration.between(visita.getSaida(), Instant.now()).compareTo(JANELA_RESPOSTA) > 0) {
+        if (visita.saida() != null
+                && Duration.between(visita.saida(), Instant.now()).compareTo(JANELA_RESPOSTA) > 0) {
             throw new RecursoNaoEncontradoException(
                     "A janela de 24 horas para avaliar esta visita já encerrou.");
         }
@@ -341,8 +331,8 @@ public class FeedbackServiceImpl implements FeedbackService {
         Map<String, String> nomes = new HashMap<>();
         List<String> distintos = hospitalIds.stream().filter(Objects::nonNull).distinct().toList();
         if (!distintos.isEmpty()) {
-            for (HospitalDocument hospital : hospitalConsulta.findAllById(distintos)) {
-                nomes.putIfAbsent(hospital.getId(), hospital.getNome());
+            for (HospitalResumo hospital : hospitalConsulta.resumos(distintos)) {
+                nomes.putIfAbsent(hospital.id(), hospital.nome());
             }
         }
         return nomes;
@@ -352,7 +342,7 @@ public class FeedbackServiceImpl implements FeedbackService {
         if (hospitalId == null) {
             return null;
         }
-        return hospitalConsulta.findById(hospitalId).map(HospitalDocument::getNome).orElse(null);
+        return hospitalConsulta.resumo(hospitalId).map(HospitalResumo::nome).orElse(null);
     }
 
     /**
@@ -367,10 +357,24 @@ public class FeedbackServiceImpl implements FeedbackService {
     }
 
     private FeedbackResponse toResponse(FeedbackDocument f, String hospitalNome) {
-        return new FeedbackResponse(
-                f.getId(), f.getVisitaId(), f.getHospitalId(), hospitalNome,
-                f.getFoiAtendido(), f.getMotivoNaoAtendido(), f.getTeveMedico(), f.getFezTriagem(),
-                f.getMedicacaoReceita(), f.getEspecialidadeProcurada(), f.getNota(), f.getTratamentoEquipe(),
-                f.getComentario(), f.isAnonimizado(), f.getCriadoEm(), calcularEditavelAte(f), true);
+        return FeedbackResponse.builder()
+                .id(f.getId())
+                .visitaId(f.getVisitaId())
+                .hospitalId(f.getHospitalId())
+                .hospitalNome(hospitalNome)
+                .foiAtendido(f.getFoiAtendido())
+                .motivoNaoAtendido(f.getMotivoNaoAtendido())
+                .teveMedico(f.getTeveMedico())
+                .fezTriagem(f.getFezTriagem())
+                .medicacaoReceita(f.getMedicacaoReceita())
+                .especialidadeProcurada(f.getEspecialidadeProcurada())
+                .nota(f.getNota())
+                .tratamentoEquipe(f.getTratamentoEquipe())
+                .comentario(f.getComentario())
+                .anonimizado(f.isAnonimizado())
+                .criadoEm(f.getCriadoEm())
+                .editavelAte(calcularEditavelAte(f))
+                .recebido(true)
+                .build();
     }
 }

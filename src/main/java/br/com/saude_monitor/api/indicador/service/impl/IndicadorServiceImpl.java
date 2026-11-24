@@ -1,19 +1,18 @@
 package br.com.saude_monitor.api.indicador.service.impl;
 
+import br.com.saude_monitor.api.feedback.dto.FeedbackParaIndicador;
 import br.com.saude_monitor.api.indicador.document.IndicadorHospitalDocument;
 import br.com.saude_monitor.api.indicador.dto.IndicadoresDetalheResponse;
+import br.com.saude_monitor.api.indicador.dto.PeriodoDoIndicador;
 import br.com.saude_monitor.api.indicador.repository.IndicadorHospitalRepository;
 import br.com.saude_monitor.api.indicador.service.IndicadorService;
 import br.com.saude_monitor.api.indicador.service.EstatisticaService;
-import br.com.saude_monitor.api.feedback.document.FeedbackDocument;
+import br.com.saude_monitor.api.indicador.service.TendenciaService;
 import br.com.saude_monitor.api.feedback.service.FeedbackConsulta;
 import br.com.saude_monitor.api.hospital.dto.IndicadoresResponse;
 import br.com.saude_monitor.api.hospital.service.HospitalConsulta;
-import br.com.saude_monitor.api.visita.document.StatusVisita;
-import br.com.saude_monitor.api.visita.document.TipoPermanencia;
-import br.com.saude_monitor.api.visita.document.VisitaDocument;
+import br.com.saude_monitor.api.visita.dto.VisitaParaIndicador;
 import br.com.saude_monitor.api.visita.service.VisitaConsulta;
-import br.com.saude_monitor.api.visita.service.PresencaVisita;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.mongodb.core.MongoTemplate;
@@ -51,7 +50,9 @@ import java.util.stream.Collectors;
  *       {@link PresencaVisita#isComprovada} (SEG-01); a avaliação de quem não comprovou
  *       presença continua aceita, mas fica fora do indicador público;</li>
  *   <li><b>{@code atualizadoEm}</b> — atualização ≤ 15min após feedback, via evento
- *       (RN-18) e job de 15min.</li>
+ *       (RN-18) e job de 15min;</li>
+ *   <li><b>tendência</b> (E4-06) — nota dos últimos 30 dias contra os 30 anteriores, com os
+ *       mesmos feedbacks já filtrados acima; regras em {@link TendenciaService}.</li>
  * </ul>
  *
  * <p>O upsert é idempotente por {@code hospitalId} (índice único) e o mapeamento da
@@ -71,11 +72,6 @@ public class IndicadorServiceImpl implements IndicadorService {
     /** Piso de duração para a métrica de tempo (RN-07): visitas com menos de 2 minutos são ruído e não entram nas estatísticas públicas. */
     static final int DURACAO_MINIMA_MINUTOS = 2;
 
-    /** Status válidos de visita para o indicador de tempo: FINALIZADA (RN-03) e GPS_INTERROMPIDO (RN-06, com cobertura ≥ 90% — RN-17). */
-    private static final List<StatusVisita> STATUS_TEMPO = List.of(
-            StatusVisita.FINALIZADA,
-            StatusVisita.GPS_INTERROMPIDO);
-
     private final IndicadorHospitalRepository indicadorRepository;
     private final FeedbackConsulta feedbackConsulta;
     private final VisitaConsulta visitaConsulta;
@@ -88,34 +84,35 @@ public class IndicadorServiceImpl implements IndicadorService {
         Instant inicio = fim.minus(PERIODO_PADRAO);
 
         // SEG-01: só conta o feedback de visita com prova de presença.
-        List<FeedbackDocument> feedbacks = filtrarDeVisitasComprovadas(feedbackConsulta
-                .findByHospitalIdAndCriadoEmAfterAndNotaNotNull(hospitalId, inicio));
+        List<FeedbackParaIndicador> feedbacks = filtrarDeVisitasComprovadas(
+                feedbackConsulta.comNotaDesde(hospitalId, inicio));
 
         List<Integer> notas = feedbacks.stream()
-                .map(FeedbackDocument::getNota)
+                .map(FeedbackParaIndicador::nota)
                 .toList();
         Double notaMedia = EstatisticaService.notaMedia(notas);
         int nAvaliacoes = (int) feedbacks.stream()
-                .filter(f -> f.getNota() != null && f.getNota() >= 1 && f.getNota() <= 5)
+                .filter(f -> f.nota() != null && f.nota() >= 1 && f.nota() <= 5)
                 .count();
 
-        // Visitas elegíveis para o indicador de tempo: FINALIZADA | GPS_INTERROMPIDO,
-        // no período, com tipoPermanencia ATENDIMENTO (exclui internação/observação, RN-24).
-        List<VisitaDocument> candidatas = visitaConsulta
-                .findByHospitalIdAndStatusInAndSaidaBetweenAndTipoPermanencia(
-                        hospitalId, STATUS_TEMPO, inicio, fim, TipoPermanencia.ATENDIMENTO);
+        // Visitas elegíveis para o indicador de tempo (FINALIZADA | GPS_INTERROMPIDO, no período,
+        // permanência ATENDIMENTO, RN-24): a visita decide, o indicador aplica as regras de duração.
+        List<VisitaParaIndicador> candidatas = visitaConsulta.paraIndicadorDeTempo(hospitalId, inicio, fim);
 
         List<Integer> duracoes = candidatas.stream()
-                .filter(PresencaVisita::isComprovada)
-                .filter(v -> v.getDuracaoMinutos() != null)
-                .filter(v -> v.getDuracaoMinutos() >= DURACAO_MINIMA_MINUTOS)
-                .filter(v -> v.getDuracaoMinutos() <= TETO_DURACAO_MINUTOS)
+                .filter(VisitaParaIndicador::comprovada)
+                .filter(v -> v.duracaoMinutos() != null)
+                .filter(v -> v.duracaoMinutos() >= DURACAO_MINIMA_MINUTOS)
+                .filter(v -> v.duracaoMinutos() <= TETO_DURACAO_MINUTOS)
                 .filter(IndicadorServiceImpl::tempoConfiavel)
-                .map(VisitaDocument::getDuracaoMinutos)
+                .map(VisitaParaIndicador::duracaoMinutos)
                 .toList();
 
         Integer tempoMediano = EstatisticaService.tempoMedianoMinutos(duracoes);
         int nVisitas = duracoes.size();
+
+        // E4-06: os dois períodos de 30 dias cabem na janela de 90 já lida, sem consulta extra.
+        TendenciaService.Resultado tendencia = TendenciaService.calcular(feedbacks, fim);
 
         IndicadorHospitalDocument indicador = IndicadorHospitalDocument.builder()
                 .hospitalId(hospitalId)
@@ -126,6 +123,9 @@ public class IndicadorServiceImpl implements IndicadorService {
                 .periodoInicio(inicio)
                 .periodoFim(fim)
                 .atualizadoEm(fim)
+                .tendenciaNota(tendencia.tendencia())
+                .variacaoNota(tendencia.variacao())
+                .tendenciaPreliminar(tendencia.preliminar())
                 .build();
 
         persistir(indicador);
@@ -172,16 +172,11 @@ public class IndicadorServiceImpl implements IndicadorService {
         // bug — não vale a complexidade extra de tentar excluí-lo daqui.
         Instant desde = Instant.now().minus(JANELA_RECALCULO);
 
-        Set<String> candidatos = new HashSet<>();
-        feedbackConsulta.findByCriadoEmAfter(desde)
-                .forEach(f -> candidatos.add(f.getHospitalId()));
-        // Edição pelo dono (até 15 dias após criar) muda a nota de feedback antigo.
-        feedbackConsulta.findByEditadoEmAfter(desde)
-                .forEach(f -> candidatos.add(f.getHospitalId()));
-        // `processadoEm` (write time), não `saida` (business time, pode ser retroativo —
+        // Feedback criado ou editado (a edição pelo dono muda a nota de feedback antigo) e visita
+        // processada: `processadoEm` (write time), não `saida` (business time, pode ser retroativo —
         // ver VisitaDocument.getProcessadoEm()). Achado do code-review de 09/09/2026.
-        visitaConsulta.findByStatusInAndProcessadoEmAfter(STATUS_TEMPO, desde)
-                .forEach(v -> candidatos.add(v.getHospitalId()));
+        Set<String> candidatos = new HashSet<>(feedbackConsulta.hospitaisComAtividadeDesde(desde));
+        candidatos.addAll(visitaConsulta.hospitaisComVisitaProcessadaDesde(desde));
 
         for (String hospitalId : candidatos) {
             try {
@@ -200,19 +195,19 @@ public class IndicadorServiceImpl implements IndicadorService {
      * Visitas FINALIZADA sempre entram (RN-03). Para {@code GPS_INTERROMPIDO} (RN-06),
      * a duração parcial só é confiável se a cobertura de GPS ≥ 90% do período (RN-17).
      */
-    private static boolean tempoConfiavel(VisitaDocument visita) {
-        if (visita.getStatus() == StatusVisita.FINALIZADA) {
+    private static boolean tempoConfiavel(VisitaParaIndicador visita) {
+        if (visita.finalizada()) {
             return true;
         }
-        if (visita.getStatus() != StatusVisita.GPS_INTERROMPIDO) {
+        if (!visita.gpsInterrompido()) {
             return false;
         }
-        Instant entrada = visita.getEntrada();
-        Instant saida = visita.getSaida();
+        Instant entrada = visita.entrada();
+        Instant saida = visita.saida();
         if (entrada == null || saida == null || !saida.isAfter(entrada)) {
             return false;
         }
-        double fracao = EstatisticaService.fracaoCoberta(entrada, saida, visita.getUltimaPosicaoEm());
+        double fracao = EstatisticaService.fracaoCoberta(entrada, saida, visita.ultimaPosicaoEm());
         return fracao >= EstatisticaService.PERCENTUAL_MINIMO_COBERTURA_GPS;
     }
 
@@ -220,22 +215,18 @@ public class IndicadorServiceImpl implements IndicadorService {
      * Mantém só os feedbacks cuja visita tem prova de presença (SEG-01), lendo as visitas em
      * lote. Feedback sem visita encontrada fica de fora.
      */
-    private List<FeedbackDocument> filtrarDeVisitasComprovadas(List<FeedbackDocument> feedbacks) {
+    private List<FeedbackParaIndicador> filtrarDeVisitasComprovadas(
+            List<FeedbackParaIndicador> feedbacks) {
         List<String> visitaIds = feedbacks.stream()
-                .map(FeedbackDocument::getVisitaId)
+                .map(FeedbackParaIndicador::visitaId)
                 .filter(Objects::nonNull)
                 .distinct()
                 .toList();
         if (visitaIds.isEmpty()) {
             return List.of();
         }
-        Set<String> comprovadas = new HashSet<>();
-        visitaConsulta.findAllById(visitaIds).forEach(v -> {
-            if (PresencaVisita.isComprovada(v)) {
-                comprovadas.add(v.getId());
-            }
-        });
-        return feedbacks.stream().filter(f -> comprovadas.contains(f.getVisitaId())).toList();
+        Set<String> comprovadas = visitaConsulta.comPresencaComprovada(visitaIds);
+        return feedbacks.stream().filter(f -> comprovadas.contains(f.visitaId())).toList();
     }
 
     /** Persiste o indicador com upsert idempotente por {@code hospitalId}. */
@@ -248,7 +239,10 @@ public class IndicadorServiceImpl implements IndicadorService {
                 .set("nVisitas", indicador.getNVisitas())
                 .set("periodoInicio", indicador.getPeriodoInicio())
                 .set("periodoFim", indicador.getPeriodoFim())
-                .set("atualizadoEm", indicador.getAtualizadoEm());
+                .set("atualizadoEm", indicador.getAtualizadoEm())
+                .set("tendenciaNota", indicador.getTendenciaNota())
+                .set("variacaoNota", indicador.getVariacaoNota())
+                .set("tendenciaPreliminar", indicador.getTendenciaPreliminar());
 
         mongoTemplate.upsert(query, update, IndicadorHospitalDocument.class);
     }
@@ -256,12 +250,23 @@ public class IndicadorServiceImpl implements IndicadorService {
     /** Indicadores embutidos compactos (listagem/detalhe) — omite valores se N < 5 (RN-15). */
     private IndicadoresResponse toIndicadoresResponse(IndicadorHospitalDocument a) {
         boolean disponivel = a.getNAvaliacoes() != null && a.getNAvaliacoes() >= 5;
-        return new IndicadoresResponse(
-                disponivel,
-                disponivel ? a.getNotaMedia() : null,
-                a.getNAvaliacoes(),
-                disponivel ? a.getTempoMedianoMinutos() : null,
-                a.getAtualizadoEm());
+        return IndicadoresResponse.builder()
+                .indicadoresDisponiveis(disponivel)
+                .notaMedia(disponivel ? a.getNotaMedia() : null)
+                .nAvaliacoes(a.getNAvaliacoes())
+                .tempoMedianoMinutos(disponivel ? a.getTempoMedianoMinutos() : null)
+                .atualizadoEm(a.getAtualizadoEm())
+                .build();
+    }
+
+    /**
+     * A tendência gravada só vale enquanto o período atual dela ainda tem avaliações (E4-06). O
+     * recálculo roda a cada feedback novo; sem recálculo há mais de {@link TendenciaService#JANELA},
+     * nenhum feedback entrou no período atual de hoje, então a tendência certa seria "sem dados"
+     * e a gravada é omitida.
+     */
+    static boolean tendenciaAtual(Instant atualizadoEm) {
+        return atualizadoEm != null && atualizadoEm.isAfter(Instant.now().minus(TendenciaService.JANELA));
     }
 
     /** Indicadores enriquecidos do endpoint dedicado (§3.5). */
@@ -269,15 +274,20 @@ public class IndicadorServiceImpl implements IndicadorService {
         boolean disponivel = a.getNAvaliacoes() != null && a.getNAvaliacoes() >= 5;
         var periodo = a.getPeriodoInicio() == null || a.getPeriodoFim() == null
                 ? null
-                : new IndicadoresDetalheResponse.Periodo(a.getPeriodoInicio(), a.getPeriodoFim());
-        return new IndicadoresDetalheResponse(
-                a.getHospitalId(),
-                disponivel,
-                disponivel ? a.getNotaMedia() : null,
-                a.getNAvaliacoes(),
-                disponivel ? a.getTempoMedianoMinutos() : null,
-                a.getNVisitas(),
-                periodo,
-                a.getAtualizadoEm());
+                : PeriodoDoIndicador.builder().inicio(a.getPeriodoInicio()).fim(a.getPeriodoFim()).build();
+        boolean comTendencia = disponivel && tendenciaAtual(a.getAtualizadoEm());
+        return IndicadoresDetalheResponse.builder()
+                .hospitalId(a.getHospitalId())
+                .indicadoresDisponiveis(disponivel)
+                .notaMedia(disponivel ? a.getNotaMedia() : null)
+                .nAvaliacoes(a.getNAvaliacoes())
+                .tempoMedianoMinutos(disponivel ? a.getTempoMedianoMinutos() : null)
+                .nVisitas(a.getNVisitas())
+                .periodo(periodo)
+                .atualizadoEm(a.getAtualizadoEm())
+                .tendenciaNota(comTendencia ? a.getTendenciaNota() : null)
+                .variacaoNota(comTendencia ? a.getVariacaoNota() : null)
+                .tendenciaPreliminar(comTendencia ? a.getTendenciaPreliminar() : null)
+                .build();
     }
 }

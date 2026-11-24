@@ -6,12 +6,8 @@ import br.com.saude_monitor.api.feedback.document.FoiAtendido;
 import br.com.saude_monitor.api.feedback.document.MedicacaoReceita;
 import br.com.saude_monitor.api.feedback.document.MotivoNaoAtendido;
 import br.com.saude_monitor.api.feedback.document.TeveMedico;
-import br.com.saude_monitor.api.hospital.document.CategoriaEstabelecimento;
-import br.com.saude_monitor.api.hospital.document.HospitalDocument;
-import br.com.saude_monitor.api.visita.document.OrigemVisita;
-import br.com.saude_monitor.api.visita.document.StatusVisita;
-import br.com.saude_monitor.api.visita.document.TipoPermanencia;
-import br.com.saude_monitor.api.visita.document.VisitaDocument;
+import br.com.saude_monitor.api.hospital.dto.HospitalParaMassa;
+import br.com.saude_monitor.api.visita.dto.VisitaDeMassa;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -25,14 +21,15 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.TreeMap;
 
 /**
  * Gera, sem tocar no banco, a massa de visitas e avaliações do ambiente de desenvolvimento.
  *
  * <p>Determinístico: a mesma semente, os mesmos hospitais e o mesmo {@code agora} produzem
- * a mesma massa. Cada hospital escolhido recebe um {@link Perfil} de qualidade que fixa a
+ * a mesma massa. Cada hospital escolhido recebe um {@link PerfilDoHospital} de qualidade que fixa a
  * distribuição das notas e do tempo de permanência, para o ranking (E4-05) ter diferenças
- * claras nas duas ordenações. Hospitais com {@link Perfil#POUCAS_AVALIACOES} ficam abaixo
+ * claras nas duas ordenações. Hospitais com {@link PerfilDoHospital#POUCAS_AVALIACOES} ficam abaixo
  * do mínimo de 5 avaliações (RN-15) e o restante dos hospitais fica sem avaliação.</p>
  *
  * <p>As respostas seguem as regras do formulário (RN-10): especialidade e atendimento só
@@ -43,6 +40,18 @@ public final class MassaAvaliacoesGerador {
     /** Prefixo dos {@code _id} gerados — é por ele que a massa é encontrada e apagada. */
     public static final String PREFIXO_ID = "massa-dev-";
 
+    /** Valores de visita, pelo nome: o módulo de visita os converte ao gravar. */
+    private static final String STATUS_FINALIZADA = "FINALIZADA";
+    private static final String STATUS_SEM_FEEDBACK = "SEM_FEEDBACK";
+    private static final String TIPO_ATENDIMENTO = "ATENDIMENTO";
+    private static final String TIPO_INTERNACAO = "INTERNACAO";
+    private static final String TIPO_OBSERVACAO = "OBSERVACAO";
+    private static final String ORIGEM_GEOFENCE = "GEOFENCE";
+    private static final String ORIGEM_MANUAL = "MANUAL";
+
+    /** Semente padrão da carga de dev: a mesma semente gera sempre a mesma massa. */
+    public static final long SEMENTE_PADRAO = 20260929L;
+
     static final String NOTA_AUDITORIA = "Massa de dados de desenvolvimento (avaliações)";
 
     /** Janela das datas geradas, dentro dos 90 dias dos indicadores (RN-14). */
@@ -50,39 +59,13 @@ public final class MassaAvaliacoesGerador {
 
     private static final ZoneOffset BRASILIA = ZoneOffset.ofHours(-3);
 
-    /**
-     * Perfil de qualidade de um hospital. {@code pesosNota[i]} é o peso da nota {@code i+1};
-     * o tempo de permanência de cada visita sai de [{@code minutosMin}, {@code minutosMax}].
-     */
-    public enum Perfil {
-        EXCELENTE(new int[]{1, 1, 4, 24, 70}, 25, 70, 10, 30),
-        BOM(new int[]{3, 7, 20, 45, 25}, 50, 130, 8, 35),
-        REGULAR(new int[]{10, 20, 40, 20, 10}, 100, 260, 6, 25),
-        RUIM(new int[]{40, 30, 18, 8, 4}, 200, 600, 6, 20),
-        POUCAS_AVALIACOES(new int[]{10, 15, 25, 30, 20}, 40, 240, 1, 4);
-
-        final int[] pesosNota;
-        final int minutosMin;
-        final int minutosMax;
-        final int avaliacoesMin;
-        final int avaliacoesMax;
-
-        Perfil(int[] pesosNota, int minutosMin, int minutosMax, int avaliacoesMin, int avaliacoesMax) {
-            this.pesosNota = pesosNota;
-            this.minutosMin = minutosMin;
-            this.minutosMax = minutosMax;
-            this.avaliacoesMin = avaliacoesMin;
-            this.avaliacoesMax = avaliacoesMax;
-        }
-    }
-
     /** Quantos hospitais recebem cada perfil, na ordem em que são distribuídos. */
-    static final Map<Perfil, Integer> HOSPITAIS_POR_PERFIL = ordenado(Map.of(
-            Perfil.EXCELENTE, 10,
-            Perfil.BOM, 14,
-            Perfil.REGULAR, 12,
-            Perfil.RUIM, 8,
-            Perfil.POUCAS_AVALIACOES, 6));
+    static final Map<PerfilDoHospital, Integer> HOSPITAIS_POR_PERFIL = ordenado(Map.of(
+            PerfilDoHospital.EXCELENTE, 10,
+            PerfilDoHospital.BOM, 14,
+            PerfilDoHospital.REGULAR, 12,
+            PerfilDoHospital.RUIM, 8,
+            PerfilDoHospital.POUCAS_AVALIACOES, 6));
 
     /** Mesma lista do formulário do app (Tela 2, RN-10). */
     static final List<String> ESPECIALIDADES = List.of(
@@ -115,13 +98,6 @@ public final class MassaAvaliacoesGerador {
             "Banheiros sujos e ar-condicionado quebrado.",
             "Me mandaram voltar outro dia. Muito difícil conseguir atendimento.");
 
-    /** Resultado da geração: o que gravar e o perfil sorteado para cada hospital. */
-    public record Massa(
-            List<VisitaDocument> visitas,
-            List<FeedbackDocument> feedbacks,
-            Map<String, Perfil> perfilPorHospital) {
-    }
-
     private final Random random;
     private final Instant agora;
     private int sequencial;
@@ -138,9 +114,9 @@ public final class MassaAvaliacoesGerador {
      * @param usuarioIds usuários de teste donos das avaliações identificadas; as demais
      *                   (cerca de 15%) são anônimas (RN-13)
      */
-    public Massa gerar(List<HospitalDocument> hospitais, List<String> usuarioIds) {
-        Map<String, Perfil> perfis = distribuirPerfis(hospitais);
-        List<VisitaDocument> visitas = new ArrayList<>();
+    public MassaGerada gerar(List<HospitalParaMassa> hospitais, List<String> usuarioIds) {
+        Map<String, PerfilDoHospital> perfis = distribuirPerfis(hospitais);
+        List<VisitaDeMassa> visitas = new ArrayList<>();
         List<FeedbackDocument> feedbacks = new ArrayList<>();
 
         perfis.forEach((hospitalId, perfil) -> {
@@ -149,49 +125,48 @@ public final class MassaAvaliacoesGerador {
                 String usuarioId = usuarioIds.isEmpty() || random.nextInt(100) < 15
                         ? null
                         : usuarioIds.get(random.nextInt(usuarioIds.size()));
-                VisitaDocument visita = visita(hospitalId, perfil, usuarioId, TipoPermanencia.ATENDIMENTO);
+                VisitaDeMassa visita = visita(hospitalId, perfil, usuarioId, TIPO_ATENDIMENTO);
                 visitas.add(visita);
                 feedbacks.add(feedback(visita, perfil));
             }
             // Visitas que não entram no tempo mediano (RN-16/RN-24): internação/observação
             // avaliada e visita sem resposta de feedback (RN-09).
-            if (perfil != Perfil.POUCAS_AVALIACOES) {
+            if (perfil != PerfilDoHospital.POUCAS_AVALIACOES) {
                 String usuarioId = usuarioIds.isEmpty() ? null : usuarioIds.get(random.nextInt(usuarioIds.size()));
-                VisitaDocument internacao = visita(hospitalId, perfil, usuarioId,
-                        random.nextBoolean() ? TipoPermanencia.INTERNACAO : TipoPermanencia.OBSERVACAO);
-                internacao.setDuracaoMinutos(entre(12 * 60, 23 * 60));
-                internacao.setSaida(internacao.getEntrada().plus(Duration.ofMinutes(internacao.getDuracaoMinutos())));
-                ajustarFechamento(internacao);
+                String tipoSemTempo = random.nextBoolean() ? TIPO_INTERNACAO : TIPO_OBSERVACAO;
+                VisitaDeMassa base = visita(hospitalId, perfil, usuarioId, tipoSemTempo);
+                int duracaoLonga = entre(12 * 60, 23 * 60);
+                VisitaDeMassa internacao = comFechamento(base.toBuilder()
+                        .duracaoMinutos(duracaoLonga)
+                        .saida(base.entrada().plus(Duration.ofMinutes(duracaoLonga)))
+                        .build());
                 visitas.add(internacao);
                 feedbacks.add(feedback(internacao, perfil));
 
-                VisitaDocument semResposta = visita(hospitalId, perfil, usuarioId, TipoPermanencia.ATENDIMENTO);
-                semResposta.setStatus(StatusVisita.SEM_FEEDBACK);
+                VisitaDeMassa semResposta = visita(hospitalId, perfil, usuarioId, TIPO_ATENDIMENTO)
+                        .toBuilder().status(STATUS_SEM_FEEDBACK).build();
                 visitas.add(semResposta);
             }
         });
-        return new Massa(visitas, feedbacks, perfis);
+        return MassaGerada.builder().visitas(visitas).feedbacks(feedbacks).perfilPorHospital(perfis).build();
     }
 
     /**
      * Sorteia os hospitais de cada perfil alternando as categorias (hospital, UPA, UBS...),
      * para o ranking ter variedade de tipos e não só a categoria mais numerosa.
      */
-    Map<String, Perfil> distribuirPerfis(List<HospitalDocument> hospitais) {
-        Map<CategoriaEstabelecimento, List<HospitalDocument>> porCategoria = new EnumMap<>(CategoriaEstabelecimento.class);
+    Map<String, PerfilDoHospital> distribuirPerfis(List<HospitalParaMassa> hospitais) {
+        Map<Integer, List<HospitalParaMassa>> porCategoria = new TreeMap<>();
         hospitais.stream()
-                .sorted(Comparator.comparing(HospitalDocument::getId))
-                .forEach(h -> porCategoria
-                        .computeIfAbsent(h.getCategoria() == null ? CategoriaEstabelecimento.OUTRO : h.getCategoria(),
-                                c -> new ArrayList<>())
-                        .add(h));
+                .sorted(Comparator.comparing(HospitalParaMassa::id))
+                .forEach(h -> porCategoria.computeIfAbsent(h.categoria(), c -> new ArrayList<>()).add(h));
         porCategoria.values().forEach(lista -> Collections.shuffle(lista, random));
 
-        List<HospitalDocument> intercalados = new ArrayList<>();
+        List<HospitalParaMassa> intercalados = new ArrayList<>();
         boolean restou = true;
         for (int i = 0; restou; i++) {
             restou = false;
-            for (List<HospitalDocument> lista : porCategoria.values()) {
+            for (List<HospitalParaMassa> lista : porCategoria.values()) {
                 if (i < lista.size()) {
                     intercalados.add(lista.get(i));
                     restou = true;
@@ -199,7 +174,7 @@ public final class MassaAvaliacoesGerador {
             }
         }
 
-        List<Perfil> fila = new ArrayList<>();
+        List<PerfilDoHospital> fila = new ArrayList<>();
         HOSPITAIS_POR_PERFIL.forEach((perfil, quantidade) -> {
             for (int i = 0; i < quantidade; i++) {
                 fila.add(perfil);
@@ -207,14 +182,14 @@ public final class MassaAvaliacoesGerador {
         });
         Collections.shuffle(fila, random);
 
-        Map<String, Perfil> perfis = new LinkedHashMap<>();
+        Map<String, PerfilDoHospital> perfis = new LinkedHashMap<>();
         for (int i = 0; i < fila.size() && i < intercalados.size(); i++) {
-            perfis.put(intercalados.get(i).getId(), fila.get(i));
+            perfis.put(intercalados.get(i).id(), fila.get(i));
         }
         return perfis;
     }
 
-    private VisitaDocument visita(String hospitalId, Perfil perfil, String usuarioId, TipoPermanencia tipo) {
+    private VisitaDeMassa visita(String hospitalId, PerfilDoHospital perfil, String usuarioId, String tipo) {
         int duracao = entre(perfil.minutosMin, perfil.minutosMax);
         // Entrada entre 2 e DIAS_JANELA dias atrás (a saída nunca passa de agora), entre 6h e 21h59 no horário de Brasília.
         Instant entrada = agora.atOffset(BRASILIA)
@@ -223,7 +198,7 @@ public final class MassaAvaliacoesGerador {
                 .plusMinutes(entre(6 * 60, 22 * 60 - 1))
                 .toInstant();
         String id = proximoId("visita");
-        VisitaDocument visita = VisitaDocument.builder()
+        VisitaDeMassa visita = VisitaDeMassa.builder()
                 .id(id)
                 .usuarioId(usuarioId)
                 .dispositivoId(usuarioId == null ? PREFIXO_ID + "dispositivo-" + entre(1, 40) : null)
@@ -231,27 +206,28 @@ public final class MassaAvaliacoesGerador {
                 .entrada(entrada)
                 .saida(entrada.plus(Duration.ofMinutes(duracao)))
                 .duracaoMinutos(duracao)
-                .status(StatusVisita.FINALIZADA)
+                .status(STATUS_FINALIZADA)
                 .tipoPermanencia(tipo)
-                .origem(random.nextInt(100) < 80 ? OrigemVisita.GEOFENCE : OrigemVisita.MANUAL)
+                .origem(random.nextInt(100) < 80 ? ORIGEM_GEOFENCE : ORIGEM_MANUAL)
                 // A massa simula visitas com prova de presença: sem isso o indicador do dev
                 // perderia as avaliações das visitas manuais (SEG-01).
                 .presencaComprovada(true)
                 .notas(NOTA_AUDITORIA)
                 .criadoEm(entrada)
                 .build();
-        ajustarFechamento(visita);
-        return visita;
+        return comFechamento(visita);
     }
 
     /** Heartbeat, última posição e momento de processamento acompanham a saída. */
-    private static void ajustarFechamento(VisitaDocument visita) {
-        visita.setUltimoHeartbeat(visita.getSaida());
-        visita.setUltimaPosicaoEm(visita.getSaida());
-        visita.setProcessadoEm(visita.getSaida());
+    private static VisitaDeMassa comFechamento(VisitaDeMassa visita) {
+        return visita.toBuilder()
+                .ultimoHeartbeat(visita.saida())
+                .ultimaPosicaoEm(visita.saida())
+                .processadoEm(visita.saida())
+                .build();
     }
 
-    private FeedbackDocument feedback(VisitaDocument visita, Perfil perfil) {
+    private FeedbackDocument feedback(VisitaDeMassa visita, PerfilDoHospital perfil) {
         int nota = sortearNota(perfil.pesosNota);
         FezTriagem triagem = escolher(new int[]{70, 20, 10}, FezTriagem.values());
 
@@ -297,12 +273,12 @@ public final class MassaAvaliacoesGerador {
             comentario = pool.get(random.nextInt(pool.size()));
         }
 
-        Instant criadoEm = visita.getSaida().plus(Duration.ofMinutes(entre(1, 30)));
+        Instant criadoEm = visita.saida().plus(Duration.ofMinutes(entre(1, 30)));
         return FeedbackDocument.builder()
                 .id(proximoId("feedback"))
-                .visitaId(visita.getId())
-                .usuarioId(visita.getUsuarioId())
-                .hospitalId(visita.getHospitalId())
+                .visitaId(visita.id())
+                .usuarioId(visita.usuarioId())
+                .hospitalId(visita.hospitalId())
                 .especialidadeProcurada(especialidade)
                 .foiAtendido(atendido)
                 .motivoNaoAtendido(motivo)
@@ -312,7 +288,7 @@ public final class MassaAvaliacoesGerador {
                 .nota(nota)
                 .tratamentoEquipe(tratamentoEquipe)
                 .comentario(comentario)
-                .anonimizado(visita.getUsuarioId() == null)
+                .anonimizado(visita.usuarioId() == null)
                 .criadoEm(criadoEm.isAfter(agora) ? agora : criadoEm)
                 .build();
     }
@@ -346,8 +322,8 @@ public final class MassaAvaliacoesGerador {
         return "%s%s-%05d".formatted(PREFIXO_ID, tipo, sequencial);
     }
 
-    private static Map<Perfil, Integer> ordenado(Map<Perfil, Integer> origem) {
-        Map<Perfil, Integer> ordenado = new EnumMap<>(Perfil.class);
+    private static Map<PerfilDoHospital, Integer> ordenado(Map<PerfilDoHospital, Integer> origem) {
+        Map<PerfilDoHospital, Integer> ordenado = new EnumMap<>(PerfilDoHospital.class);
         ordenado.putAll(origem);
         return Collections.unmodifiableMap(ordenado);
     }

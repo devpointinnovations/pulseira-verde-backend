@@ -1,6 +1,5 @@
 package br.com.saude_monitor.api.config.security;
 
-import br.com.saude_monitor.api.user.document.UserDocument;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtBuilder;
 import io.jsonwebtoken.JwtParser;
@@ -46,12 +45,12 @@ public class JwtService {
     }
 
     /** Gera um access token (15 min) para o usuário. */
-    public String generateAccessToken(UserDocument user) {
+    public String generateAccessToken(UsuarioAutenticavel user) {
         return buildToken(user, properties.accessExpirationMs(), TYPE_ACCESS);
     }
 
     /** Gera um refresh token (30 dias) para o usuário. */
-    public String generateRefreshToken(UserDocument user) {
+    public String generateRefreshToken(UsuarioAutenticavel user) {
         return buildToken(user, properties.refreshExpirationMs(), TYPE_REFRESH);
     }
 
@@ -85,7 +84,7 @@ public class JwtService {
         return extractAllClaims(token).getExpiration().toInstant();
     }
 
-    /** Extrai o momento de emissão (para comparar com {@code UserDocument.senhaAlteradaEm}). */
+    /** Extrai o momento de emissão (para comparar com {@code UsuarioAutenticavel.senhaAlteradaEm}). */
     public Instant extractIssuedAt(String token) {
         return extractAllClaims(token).getIssuedAt().toInstant();
     }
@@ -129,7 +128,7 @@ public class JwtService {
         }
     }
 
-    private String buildToken(UserDocument user, long expirationMs, String type) {
+    private String buildToken(UsuarioAutenticavel user, long expirationMs, String type) {
         Instant now = Instant.now();
         JwtBuilder builder = Jwts.builder();
         if (chaves.kidAtivo() != null) {
@@ -137,7 +136,7 @@ public class JwtService {
         }
         return builder
                 .id(UUID.randomUUID().toString())
-                .subject(user.getEmail())
+                .subject(user.email())
                 .claim(CLAIM_TYPE, type)
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plusMillis(expirationMs)))

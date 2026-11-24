@@ -1,6 +1,8 @@
 package br.com.saude_monitor.api.configuracao.service;
 
 import br.com.saude_monitor.api.config.contencao.ContencaoProperties;
+import br.com.saude_monitor.api.config.contencao.FonteDoModoSomenteLeitura;
+import br.com.saude_monitor.api.config.contencao.SomenteLeitura;
 import br.com.saude_monitor.api.configuracao.document.ConfiguracaoRemotaDocument;
 import br.com.saude_monitor.api.configuracao.dto.ConfiguracaoRemotaRequest;
 import br.com.saude_monitor.api.configuracao.dto.ConfiguracaoRemotaResponse;
@@ -29,7 +31,7 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 @Slf4j
 @Service
-public class ConfiguracaoRemotaService {
+public class ConfiguracaoRemotaService implements FonteDoModoSomenteLeitura {
 
     /** Por quanto tempo cada instância reaproveita a configuração lida. */
     public static final Duration VALIDADE = Duration.ofSeconds(30);
@@ -38,7 +40,7 @@ public class ConfiguracaoRemotaService {
     private final ContencaoProperties contencao;
     private final Clock clock;
 
-    private final AtomicReference<Guardada> guardada = new AtomicReference<>();
+    private final AtomicReference<ConfiguracaoGuardada> guardada = new AtomicReference<>();
 
     @Autowired
     public ConfiguracaoRemotaService(ConfiguracaoRemotaRepository repository, ContencaoProperties contencao) {
@@ -52,10 +54,21 @@ public class ConfiguracaoRemotaService {
     }
 
     /** Configuração em vigor, com o modo somente leitura forçado por ambiente já aplicado. */
+    /** O modo somente leitura como a contenção o enxerga (inclui o forçado por configuração do ambiente). */
+    @Override
+    public SomenteLeitura somenteLeitura() {
+        ConfiguracaoRemotaResponse atual = obterConfiguracao();
+        return SomenteLeitura.builder().ativo(atual.modoSomenteLeitura()).mensagem(atual.mensagem()).build();
+    }
+
     public ConfiguracaoRemotaResponse obterConfiguracao() {
         ConfiguracaoRemotaResponse lida = obterConfiguracaoGuardada();
         if (contencao.somenteLeituraForcado() && !lida.modoSomenteLeitura()) {
-            return new ConfiguracaoRemotaResponse(true, lida.versaoMinimaApp(), lida.mensagem());
+            return ConfiguracaoRemotaResponse.builder()
+            .modoSomenteLeitura(true)
+            .versaoMinimaApp(lida.versaoMinimaApp())
+            .mensagem(lida.mensagem())
+            .build();
         }
         return lida;
     }
@@ -79,12 +92,12 @@ public class ConfiguracaoRemotaService {
         log.info("[Configuracao] alterada por {}: somente leitura={}, versão mínima={}.",
                 administradorId, documento.isModoSomenteLeitura(), documento.getVersaoMinimaApp());
         ConfiguracaoRemotaResponse nova = converterParaResposta(documento);
-        guardada.set(new Guardada(nova, clock.instant().plus(VALIDADE)));
+        guardada.set(ConfiguracaoGuardada.builder().configuracao(nova).expiraEm(clock.instant().plus(VALIDADE)).build());
         return obterConfiguracao();
     }
 
     private ConfiguracaoRemotaResponse obterConfiguracaoGuardada() {
-        Guardada atual = guardada.get();
+        ConfiguracaoGuardada atual = guardada.get();
         if (atual != null && clock.instant().isBefore(atual.expiraEm())) {
             return atual.configuracao();
         }
@@ -93,7 +106,7 @@ public class ConfiguracaoRemotaService {
 
     private synchronized ConfiguracaoRemotaResponse relerDoBanco() {
         Instant agora = clock.instant();
-        Guardada atual = guardada.get();
+        ConfiguracaoGuardada atual = guardada.get();
         if (atual != null && agora.isBefore(atual.expiraEm())) {
             return atual.configuracao(); // outra thread releu enquanto esta esperava
         }
@@ -106,15 +119,15 @@ public class ConfiguracaoRemotaService {
             configuracao = atual != null ? atual.configuracao() : ConfiguracaoRemotaResponse.PADRAO;
             log.warn("[Configuracao] banco indisponível; mantida a configuração anterior: {}", e.getMessage());
         }
-        guardada.set(new Guardada(configuracao, agora.plus(VALIDADE)));
+        guardada.set(ConfiguracaoGuardada.builder().configuracao(configuracao).expiraEm(agora.plus(VALIDADE)).build());
         return configuracao;
     }
 
     private static ConfiguracaoRemotaResponse converterParaResposta(ConfiguracaoRemotaDocument documento) {
-        return new ConfiguracaoRemotaResponse(
-                documento.isModoSomenteLeitura(), documento.getVersaoMinimaApp(), documento.getMensagem());
-    }
-
-    private record Guardada(ConfiguracaoRemotaResponse configuracao, Instant expiraEm) {
+        return ConfiguracaoRemotaResponse.builder()
+            .modoSomenteLeitura(documento.isModoSomenteLeitura())
+            .versaoMinimaApp(documento.getVersaoMinimaApp())
+            .mensagem(documento.getMensagem())
+            .build();
     }
 }

@@ -1,4 +1,4 @@
-package br.com.saude_monitor.api.indicador.event;
+package br.com.saude_monitor.api.feedback.event;
 
 /**
  * Evento de domínio disparado quando um feedback pós-saída é salvo (Épico 04).

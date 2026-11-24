@@ -1,7 +1,5 @@
 package br.com.saude_monitor.api.config.contencao;
 
-import br.com.saude_monitor.api.configuracao.dto.ConfiguracaoRemotaResponse;
-import br.com.saude_monitor.api.configuracao.service.ConfiguracaoRemotaService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -43,7 +41,7 @@ public class ModoSomenteLeituraFilter extends OncePerRequestFilter {
             "/api/v1/auth/painel/logout",
             "/api/v1/admin/configuracao");
 
-    private final ConfiguracaoRemotaService configuracaoRemotaService;
+    private final FonteDoModoSomenteLeitura fonte;
     private final ContencaoProperties properties;
     private final ObjectMapper objectMapper;
 
@@ -58,14 +56,14 @@ public class ModoSomenteLeituraFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
-        ConfiguracaoRemotaResponse configuracao = configuracaoRemotaService.obterConfiguracao();
-        if (!configuracao.modoSomenteLeitura()) {
+        SomenteLeitura estado = fonte.somenteLeitura();
+        if (!estado.ativo()) {
             filterChain.doFilter(request, response);
             return;
         }
-        String mensagem = configuracao.mensagem() == null || configuracao.mensagem().isBlank()
+        String mensagem = estado.mensagem() == null || estado.mensagem().isBlank()
                 ? MENSAGEM_PADRAO
-                : configuracao.mensagem();
+                : estado.mensagem();
         RespostaIndisponivel.escreverResposta(response, objectMapper, CODIGO, mensagem,
                 properties.retryAfterSomenteLeituraSegundos());
     }

@@ -3,7 +3,7 @@ package br.com.saude_monitor.api.user.service.impl;
 import br.com.saude_monitor.api.config.security.UsuarioAutenticadoCache;
 import br.com.saude_monitor.api.feedback.service.FeedbackConsulta;
 import br.com.saude_monitor.api.indicador.service.IndicadorService;
-import br.com.saude_monitor.api.auth.service.AuthService;
+import br.com.saude_monitor.api.user.service.EnvioDeConfirmacaoDeEmail;
 import br.com.saude_monitor.api.visita.service.VisitaConsulta;
 import br.com.saude_monitor.api.config.exception.ConflitoException;
 import br.com.saude_monitor.api.config.exception.RecursoNaoEncontradoException;
@@ -19,7 +19,7 @@ import br.com.saude_monitor.api.user.dto.UserRequest;
 import br.com.saude_monitor.api.user.dto.UserResponse;
 import br.com.saude_monitor.api.user.repository.UserRepository;
 import br.com.saude_monitor.api.user.service.UserService;
-import br.com.saude_monitor.api.user.util.EmailNormalizer;
+import br.com.saude_monitor.api.config.util.EmailNormalizer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -59,7 +59,7 @@ public class UserServiceImpl implements UserService {
     private final VisitaConsulta visitaConsulta;
     private final FeedbackConsulta feedbackConsulta;
     private final IndicadorService indicadorService;
-    private final AuthService authService;
+    private final EnvioDeConfirmacaoDeEmail envioDeConfirmacaoDeEmail;
     private final UsuarioAutenticadoCache usuarioAutenticadoCache;
 
     @Override
@@ -93,19 +93,19 @@ public class UserServiceImpl implements UserService {
         // digitação ou inexistente nunca recebe o código de "esqueci minha senha" — a
         // conta fica sem recuperação possível. O login fica bloqueado até confirmar
         // (AuthServiceImpl.login()).
-        authService.enviarCodigoConfirmacaoEmail(normalizedEmail);
+        envioDeConfirmacaoDeEmail.enviarCodigoConfirmacaoEmail(normalizedEmail);
 
-        return new UserResponse(
-                true,
-                "Usuário cadastrado com sucesso",
-                user.getId(),
-                user.getFullName(),
-                user.getEmail(),
-                user.getPhone(),
-                user.isActive(),
-                user.getCreatedAt(),
-                user.getUpdatedAt()
-        );
+        return UserResponse.builder()
+                .success(true)
+                .message("Usuário cadastrado com sucesso")
+                .id(user.getId())
+                .fullName(user.getFullName())
+                .email(user.getEmail())
+                .phone(user.getPhone())
+                .active(user.isActive())
+                .createdAt(user.getCreatedAt())
+                .updatedAt(user.getUpdatedAt())
+                .build();
     }
 
     @Override

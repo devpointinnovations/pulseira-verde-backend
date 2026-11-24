@@ -33,12 +33,25 @@ class FeedbackControllerTest {
         @Override
         public FeedbackResponse criar(FeedbackRequest request, String usuarioId) {
             chamadas++;
-            return new FeedbackResponse(
-                    "fb-1", request.visitaId(), "hosp-1", "Hospital 1",
-                    request.foiAtendido(), null, request.teveMedico(), request.fezTriagem(),
-                    request.medicacaoReceita(), request.especialidadeProcurada(), request.nota(),
-                    request.tratamentoEquipe(), request.comentario(), usuarioId == null, Instant.now(),
-                    null, true);
+            return FeedbackResponse.builder()
+                    .id("fb-1")
+                    .visitaId(request.visitaId())
+                    .hospitalId("hosp-1")
+                    .hospitalNome("Hospital 1")
+                    .foiAtendido(request.foiAtendido())
+                    .motivoNaoAtendido(null)
+                    .teveMedico(request.teveMedico())
+                    .fezTriagem(request.fezTriagem())
+                    .medicacaoReceita(request.medicacaoReceita())
+                    .especialidadeProcurada(request.especialidadeProcurada())
+                    .nota(request.nota())
+                    .tratamentoEquipe(request.tratamentoEquipe())
+                    .comentario(request.comentario())
+                    .anonimizado(usuarioId == null)
+                    .criadoEm(Instant.now())
+                    .editavelAte(null)
+                    .recebido(true)
+                    .build();
         }
 
         @Override

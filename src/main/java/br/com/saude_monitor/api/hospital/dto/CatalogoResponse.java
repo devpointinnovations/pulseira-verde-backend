@@ -1,6 +1,7 @@
 package br.com.saude_monitor.api.hospital.dto;
 
 import java.util.List;
+import lombok.Builder;
 
 /**
  * Catálogo público de estabelecimentos (ARQ-01), servido por {@code GET /api/v1/catalogo}.
@@ -11,6 +12,7 @@ import java.util.List;
  * no {@code ETag} e no {@code versaoCatalogo} da configuração remota: muda quando algum
  * estabelecimento muda pelo painel (ou pela carga de dados), e só nesse caso.</p>
  */
+@Builder
 public record CatalogoResponse(
         String versao,
         int total,

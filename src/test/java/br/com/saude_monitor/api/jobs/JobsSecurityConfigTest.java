@@ -60,7 +60,7 @@ class JobsSecurityConfigTest {
     @BeforeEach
     void setup() {
         reset(executor);
-        when(executor.executar("indicadores")).thenReturn(Optional.of(ExecutorJobs.Resultado.EXECUTADO));
+        when(executor.executar("indicadores")).thenReturn(Optional.of(ResultadoExecucao.EXECUTADO));
         when(executor.executar("inexistente")).thenReturn(Optional.empty());
         mockMvc = MockMvcBuilders.webAppContextSetup(contexto)
                 .addFilters(contexto.getBean("springSecurityFilterChain", Filter.class))

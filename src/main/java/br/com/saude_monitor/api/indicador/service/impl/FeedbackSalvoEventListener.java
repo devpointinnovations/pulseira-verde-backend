@@ -1,6 +1,6 @@
 package br.com.saude_monitor.api.indicador.service.impl;
 
-import br.com.saude_monitor.api.indicador.event.FeedbackSalvoEvent;
+import br.com.saude_monitor.api.feedback.event.FeedbackSalvoEvent;
 import br.com.saude_monitor.api.indicador.service.IndicadorService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

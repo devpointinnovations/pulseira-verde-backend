@@ -2,10 +2,12 @@ package br.com.saude_monitor.api.config.exception;
 
 import java.time.Instant;
 import java.util.List;
+import lombok.Builder;
 
 /**
  * Envelope de erro padrão da API (§1.1 da Especificação da API v2.0).
  */
+@Builder
 public record ApiError(
         Instant timestamp,
         int status,

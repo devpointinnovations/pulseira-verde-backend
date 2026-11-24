@@ -1,6 +1,7 @@
 package br.com.saude_monitor.api.indicador.dto;
 
 import java.time.Instant;
+import lombok.Builder;
 
 /**
  * Resposta do endpoint dedicado {@code GET /api/v1/hospitais/{id}/indicadores} (§3.5).
@@ -11,7 +12,13 @@ import java.time.Instant;
  *
  * <p>Quando {@code nAvaliacoes < 5} (RN-15), {@code indicadoresDisponiveis = false} e os
  * campos de valor ficam {@code null}.</p>
+ *
+ * <p>Tendência simples (E4-06): {@code tendenciaNota}, {@code variacaoNota} e
+ * {@code tendenciaPreliminar} comparam a nota dos últimos 30 dias com a dos 30 anteriores. São
+ * opcionais: ficam {@code null} quando algum dos dois períodos tem menos de 5 avaliações, quando
+ * os indicadores estão indisponíveis ou quando o último recálculo tem mais de 30 dias.</p>
  */
+@Builder
 public record IndicadoresDetalheResponse(
         String hospitalId,
         boolean indicadoresDisponiveis,
@@ -19,16 +26,27 @@ public record IndicadoresDetalheResponse(
         Integer nAvaliacoes,
         Integer tempoMedianoMinutos,
         Integer nVisitas,
-        Periodo periodo,
-        Instant atualizadoEm
+        PeriodoDoIndicador periodo,
+        Instant atualizadoEm,
+        TendenciaNota tendenciaNota,
+        Double variacaoNota,
+        Boolean tendenciaPreliminar
 ) {
 
     /** Fábrica padrão quando não há indicador materializado ainda (nenhum feedback/visita). */
     public static IndicadoresDetalheResponse indisponivel(String hospitalId) {
-        return new IndicadoresDetalheResponse(hospitalId, false, null, null, null, null, null, null);
-    }
-
-    /** Intervalo (inclusivo) do período de cálculo (RN-19). */
-    public record Periodo(Instant inicio, Instant fim) {
+        return IndicadoresDetalheResponse.builder()
+                .hospitalId(hospitalId)
+                .indicadoresDisponiveis(false)
+                .notaMedia(null)
+                .nAvaliacoes(null)
+                .tempoMedianoMinutos(null)
+                .nVisitas(null)
+                .periodo(null)
+                .atualizadoEm(null)
+                .tendenciaNota(null)
+                .variacaoNota(null)
+                .tendenciaPreliminar(null)
+                .build();
     }
 }

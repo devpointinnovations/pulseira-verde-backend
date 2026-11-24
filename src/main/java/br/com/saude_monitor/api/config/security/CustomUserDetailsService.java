@@ -1,8 +1,6 @@
 package br.com.saude_monitor.api.config.security;
 
-import br.com.saude_monitor.api.user.document.UserDocument;
-import br.com.saude_monitor.api.user.service.UsuarioConsulta;
-import br.com.saude_monitor.api.user.util.EmailNormalizer;
+import br.com.saude_monitor.api.config.util.EmailNormalizer;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -13,7 +11,7 @@ import org.springframework.stereotype.Service;
 /**
  * Carrega o usuário pelo e-mail para a autenticação JWT (F0-01).
  *
- * <p>Converte {@link UserDocument} em {@link UserDetails}, usando o {@code senhaHash}
+ * <p>Converte {@link UsuarioAutenticavel} em {@link UserDetails}, usando o {@code senhaHash}
  * (BCrypt) e o papel como autoridade {@code ROLE_<PAPEL>}. Usuários inativos são
  * marcados como {@code disabled}, bloqueando o acesso mesmo com token válido.</p>
  */
@@ -21,7 +19,7 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class CustomUserDetailsService implements UserDetailsService {
 
-    private final UsuarioConsulta usuarioConsulta;
+    private final FonteDeContas fonteDeContas;
 
     @Override
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
@@ -32,15 +30,13 @@ public class CustomUserDetailsService implements UserDetailsService {
             // do Spring Data (comportamento não garantido pelo driver do Mongo).
             throw new UsernameNotFoundException("Usuário não encontrado: " + email);
         }
-        UserDocument user = usuarioConsulta.findByEmail(normalizado)
+        UsuarioAutenticavel user = fonteDeContas.autenticavelPorEmail(normalizado)
                 .orElseThrow(() -> new UsernameNotFoundException("Usuário não encontrado: " + email));
 
-        String papel = user.getPapel() == null ? "USER" : user.getPapel().name();
-
-        return User.withUsername(user.getEmail())
-                .password(user.getSenhaHash() == null ? "" : user.getSenhaHash())
-                .roles(papel)
-                .disabled(!user.isActive())
+        return User.withUsername(user.email())
+                .password(user.senhaHash() == null ? "" : user.senhaHash())
+                .roles(user.papel())
+                .disabled(!user.ativo())
                 .build();
     }
 }

@@ -9,11 +9,12 @@ import br.com.saude_monitor.api.auth.dto.ReenviarConfirmacaoRequest;
 import br.com.saude_monitor.api.auth.dto.RefreshRequest;
 import br.com.saude_monitor.api.auth.service.AuthService;
 import br.com.saude_monitor.api.config.exception.LimiteExcedidoException;
+import br.com.saude_monitor.api.config.ratelimit.GrupoDeLimite;
 import br.com.saude_monitor.api.config.ratelimit.RateLimitService;
 import br.com.saude_monitor.api.user.dto.UserRequest;
 import br.com.saude_monitor.api.user.dto.UserResponse;
 import br.com.saude_monitor.api.user.service.UserService;
-import br.com.saude_monitor.api.user.util.EmailNormalizer;
+import br.com.saude_monitor.api.config.util.EmailNormalizer;
 import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -64,7 +65,7 @@ public class AuthController {
         logger.info("[AuthController] Login recebido para email={}", request.email());
         // Por conta, além do limite por IP do filtro: tentativa de senha contra uma conta
         // não escapa trocando de IP (ARQ-02).
-        aplicarLimite("login:" + EmailNormalizer.normalizar(request.email()), RateLimitService.Grupo.LOGIN);
+        aplicarLimite("login:" + EmailNormalizer.normalizar(request.email()), GrupoDeLimite.LOGIN);
         return ResponseEntity.ok(authService.login(request));
     }
 
@@ -74,11 +75,11 @@ public class AuthController {
     public ResponseEntity<AuthResponse> refresh(@Valid @RequestBody RefreshRequest request) {
         // Pelo próprio refresh token, nunca pelo IP (ARQ-02): atrás do CGNAT das operadoras,
         // o limite por IP fazia a renovação de quem tem sessão válida levar 429 no pico.
-        aplicarLimite("refresh:" + calcularHashSha256(request.refreshToken()), RateLimitService.Grupo.REFRESH);
+        aplicarLimite("refresh:" + calcularHashSha256(request.refreshToken()), GrupoDeLimite.REFRESH);
         return ResponseEntity.ok(authService.refresh(request));
     }
 
-    private void aplicarLimite(String chave, RateLimitService.Grupo grupo) {
+    private void aplicarLimite(String chave, GrupoDeLimite grupo) {
         if (!rateLimitService.tentarConsumir(chave, grupo)) {
             throw new LimiteExcedidoException(rateLimitService.limite(grupo));
         }

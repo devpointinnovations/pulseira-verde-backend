@@ -33,11 +33,28 @@ class CatalogoControllerTest {
 
     @BeforeEach
     void setup() {
-        HospitalResumoResponse item = new HospitalResumoResponse("h1", "Hospital Um", TipoEstabelecimento.PUBLICO,
-                null, null, null, null, 150, true, null, null);
-        when(catalogoService.obterCatalogo()).thenReturn(new CatalogoResponse(VERSAO, 1, List.of(item)));
+        HospitalResumoResponse item = HospitalResumoResponse.builder()
+                .id("h1")
+                .nome("Hospital Um")
+                .tipo(TipoEstabelecimento.PUBLICO)
+                .categoria(null)
+                .tipoUnidade(null)
+                .endereco(null)
+                .localizacao(null)
+                .raioMetros(150)
+                .ativo(true)
+                .regiaoAdministrativa(null)
+                .indicadores(null)
+                .build();
+        when(catalogoService.obterCatalogo()).thenReturn(CatalogoResponse.builder().versao(VERSAO).total(1).estabelecimentos(List.of(item)).build());
         when(catalogoService.obterIndicadores()).thenReturn(new IndicadoresCatalogoResponse(VERSAO_INDICADORES,
-                Map.of("h1", new IndicadoresResponse(true, 4.5, 12, 40, null))));
+                Map.of("h1", IndicadoresResponse.builder()
+                        .indicadoresDisponiveis(true)
+                        .notaMedia(4.5)
+                        .nAvaliacoes(12)
+                        .tempoMedianoMinutos(40)
+                        .atualizadoEm(null)
+                        .build())));
         mockMvc = MockMvcBuilders.standaloneSetup(new CatalogoController(catalogoService)).build();
     }
 

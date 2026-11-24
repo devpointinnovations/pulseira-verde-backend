@@ -1,6 +1,5 @@
 package br.com.saude_monitor.api.hospital.service.impl;
 
-import br.com.saude_monitor.api.indicador.service.IndicadorService;
 import br.com.saude_monitor.api.config.exception.ConflitoException;
 import br.com.saude_monitor.api.config.exception.RecursoNaoEncontradoException;
 import br.com.saude_monitor.api.config.security.AutenticacaoHelper;
@@ -31,6 +30,7 @@ import br.com.saude_monitor.api.hospital.repository.SugestaoHospitalRepository;
 import br.com.saude_monitor.api.hospital.service.GeofenceFactory;
 import br.com.saude_monitor.api.hospital.service.GeofenceValidator;
 import br.com.saude_monitor.api.hospital.service.HospitalService;
+import br.com.saude_monitor.api.hospital.service.IndicadoresDosHospitais;
 import br.com.saude_monitor.api.regiao.service.RegiaoAdministrativaResolver;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.mongodb.core.geo.GeoJsonPoint;
@@ -73,7 +73,7 @@ public class HospitalServiceImpl implements HospitalService {
     private final GeofenceValidator geofenceValidator;
     private final GeofenceFactory geofenceFactory;
     private final AutenticacaoHelper autenticacaoHelper;
-    private final IndicadorService indicadorService;
+    private final IndicadoresDosHospitais indicadoresDosHospitais;
     private final RegiaoAdministrativaResolver regiaoAdministrativaResolver;
 
     @Override
@@ -503,13 +503,13 @@ public class HospitalServiceImpl implements HospitalService {
 
     /** Indicadores embutidos de um único hospital (detalhe/escrita), com cache por chamada. */
     private IndicadoresResponse indicadoresDe(HospitalDocument d) {
-        return indicadorService.mapaIndicadores(List.of(d.getId())).getFirst();
+        return indicadoresDosHospitais.mapaIndicadores(List.of(d.getId())).getFirst();
     }
 
     /** Mapa id do hospital → indicadores, calculado em lote para listagens (evita N+1). */
     private Map<String, IndicadoresResponse> mapaIndicadores(List<HospitalDocument> documentos) {
         List<String> ids = documentos.stream().map(HospitalDocument::getId).toList();
-        List<IndicadoresResponse> indicadores = indicadorService.mapaIndicadores(ids);
+        List<IndicadoresResponse> indicadores = indicadoresDosHospitais.mapaIndicadores(ids);
         java.util.LinkedHashMap<String, IndicadoresResponse> mapa = new java.util.LinkedHashMap<>();
         for (int i = 0; i < documentos.size(); i++) {
             mapa.put(documentos.get(i).getId(), indicadores.get(i));
@@ -518,26 +518,26 @@ public class HospitalServiceImpl implements HospitalService {
     }
 
     private HospitalResponse toResponse(HospitalDocument d, IndicadoresResponse indicadores) {
-        return new HospitalResponse(
-                d.getId(),
-                d.getNome(),
-                d.getCnpj(),
-                d.getTipo(),
-                d.getCategoria(),
-                d.getHorarioFuncionamento(),
-                d.getSalaVacina(),
-                d.getFarmacia(),
-                d.getColetaMaterial(),
-                d.getTipoUnidade(),
-                d.getEndereco() == null ? null : toEnderecoDto(d.getEndereco()),
-                d.getContato() == null ? null : toContatoDto(d.getContato()),
-                d.getGeofence() == null ? null : geofenceFactory.toDto(d.getGeofence()),
-                d.isAtivo(),
-                d.getRegiaoAdministrativa(),
-                indicadores,
-                d.getCriadoEm(),
-                d.getAtualizadoEm()
-        );
+        return HospitalResponse.builder()
+                .id(d.getId())
+                .nome(d.getNome())
+                .cnpj(d.getCnpj())
+                .tipo(d.getTipo())
+                .categoria(d.getCategoria())
+                .horarioFuncionamento(d.getHorarioFuncionamento())
+                .salaVacina(d.getSalaVacina())
+                .farmacia(d.getFarmacia())
+                .coletaMaterial(d.getColetaMaterial())
+                .tipoUnidade(d.getTipoUnidade())
+                .endereco(d.getEndereco() == null ? null : toEnderecoDto(d.getEndereco()))
+                .contato(d.getContato() == null ? null : toContatoDto(d.getContato()))
+                .geofence(d.getGeofence() == null ? null : geofenceFactory.toDto(d.getGeofence()))
+                .ativo(d.isAtivo())
+                .regiaoAdministrativa(d.getRegiaoAdministrativa())
+                .indicadores(indicadores)
+                .criadoEm(d.getCriadoEm())
+                .atualizadoEm(d.getAtualizadoEm())
+                .build();
     }
 
     /** Resolve a RA do centroide (E7-03); {@code null} se o ponto cair fora de todas. */
@@ -549,19 +549,19 @@ public class HospitalServiceImpl implements HospitalService {
     }
 
     private HospitalResumoResponse toResumo(HospitalDocument d, IndicadoresResponse indicadores) {
-        return new HospitalResumoResponse(
-                d.getId(),
-                d.getNome(),
-                d.getTipo(),
-                d.getCategoria(),
-                d.getTipoUnidade(),
-                d.getEndereco() == null ? null : toEnderecoDto(d.getEndereco()),
-                toLocalizacaoDto(d),
-                geofenceFactory.raioAproximadoMetros(d.getGeofence(), centroideDe(d)),
-                d.isAtivo(),
-                d.getRegiaoAdministrativa(),
-                indicadores
-        );
+        return HospitalResumoResponse.builder()
+                .id(d.getId())
+                .nome(d.getNome())
+                .tipo(d.getTipo())
+                .categoria(d.getCategoria())
+                .tipoUnidade(d.getTipoUnidade())
+                .endereco(d.getEndereco() == null ? null : toEnderecoDto(d.getEndereco()))
+                .localizacao(toLocalizacaoDto(d))
+                .raioMetros(geofenceFactory.raioAproximadoMetros(d.getGeofence(), centroideDe(d)))
+                .ativo(d.isAtivo())
+                .regiaoAdministrativa(d.getRegiaoAdministrativa())
+                .indicadores(indicadores)
+                .build();
     }
 
     /**
@@ -608,9 +608,15 @@ public class HospitalServiceImpl implements HospitalService {
     }
 
     private EnderecoDto toEnderecoDto(EnderecoDocument e) {
-        return new EnderecoDto(
-                e.getLogradouro(), e.getNumero(), e.getComplemento(),
-                e.getBairro(), e.getCidade(), e.getUf(), e.getCep());
+        return EnderecoDto.builder()
+                .logradouro(e.getLogradouro())
+                .numero(e.getNumero())
+                .complemento(e.getComplemento())
+                .bairro(e.getBairro())
+                .cidade(e.getCidade())
+                .uf(e.getUf())
+                .cep(e.getCep())
+                .build();
     }
 
     private ContatoDto toContatoDto(ContatoDocument c) {
@@ -618,30 +624,30 @@ public class HospitalServiceImpl implements HospitalService {
     }
 
     private SugestaoHospitalResponse toSugestaoResponse(SugestaoHospitalDocument s) {
-        return new SugestaoHospitalResponse(
-                s.getId(),
-                s.getNome(),
-                s.getEndereco() == null ? null : toEnderecoDto(s.getEndereco()),
-                s.getObservacao(),
-                s.getStatus(),
-                s.getCriadoEm()
-        );
+        return SugestaoHospitalResponse.builder()
+                .id(s.getId())
+                .nome(s.getNome())
+                .endereco(s.getEndereco() == null ? null : toEnderecoDto(s.getEndereco()))
+                .observacao(s.getObservacao())
+                .status(s.getStatus())
+                .criadoEm(s.getCriadoEm())
+                .build();
     }
 
     private SugestaoHospitalDetalheResponse toSugestaoDetalheResponse(SugestaoHospitalDocument s) {
-        return new SugestaoHospitalDetalheResponse(
-                s.getId(),
-                s.getNome(),
-                s.getEndereco() == null ? null : toEnderecoDto(s.getEndereco()),
-                s.getObservacao(),
-                s.getStatus(),
-                s.getHospitalId(),
-                s.getRevisadoPor(),
-                s.getRevisadoEm(),
-                s.getMotivoRecusa(),
-                s.getCriadoEm(),
-                s.getAtualizadoEm()
-        );
+        return SugestaoHospitalDetalheResponse.builder()
+                .id(s.getId())
+                .nome(s.getNome())
+                .endereco(s.getEndereco() == null ? null : toEnderecoDto(s.getEndereco()))
+                .observacao(s.getObservacao())
+                .status(s.getStatus())
+                .hospitalId(s.getHospitalId())
+                .revisadoPor(s.getRevisadoPor())
+                .revisadoEm(s.getRevisadoEm())
+                .motivoRecusa(s.getMotivoRecusa())
+                .criadoEm(s.getCriadoEm())
+                .atualizadoEm(s.getAtualizadoEm())
+                .build();
     }
 
     /** Converte string vazia/espaços em {@code null}. */

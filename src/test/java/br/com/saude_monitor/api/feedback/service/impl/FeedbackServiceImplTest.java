@@ -9,9 +9,11 @@ import br.com.saude_monitor.api.feedback.dto.FeedbackRequest;
 import br.com.saude_monitor.api.feedback.dto.FeedbackResponse;
 import br.com.saude_monitor.api.feedback.repository.FeedbackRepository;
 import br.com.saude_monitor.api.hospital.document.HospitalDocument;
+import br.com.saude_monitor.api.hospital.repository.HospitalRepository;
 import br.com.saude_monitor.api.hospital.service.HospitalConsulta;
 import br.com.saude_monitor.api.visita.document.StatusVisita;
 import br.com.saude_monitor.api.visita.document.VisitaDocument;
+import br.com.saude_monitor.api.visita.repository.VisitaRepository;
 import br.com.saude_monitor.api.visita.service.VisitaConsulta;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -43,12 +45,13 @@ import static org.mockito.Mockito.when;
 class FeedbackServiceImplTest {
 
     private final FeedbackRepository feedbackRepository = mock(FeedbackRepository.class);
-    private final VisitaConsulta visitaConsulta = mock(VisitaConsulta.class);
-    private final HospitalConsulta hospitalConsulta = mock(HospitalConsulta.class);
+    private final VisitaRepository visitaRepository = mock(VisitaRepository.class);
+    private final HospitalRepository hospitalRepository = mock(HospitalRepository.class);
     private final ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
     private final MongoTemplate mongoTemplate = mock(MongoTemplate.class);
-    private final FeedbackServiceImpl service =
-            new FeedbackServiceImpl(feedbackRepository, visitaConsulta, hospitalConsulta, eventPublisher, mongoTemplate);
+    private final FeedbackServiceImpl service = new FeedbackServiceImpl(feedbackRepository,
+            new VisitaConsulta(visitaRepository, mongoTemplate), new HospitalConsulta(hospitalRepository, mongoTemplate),
+            eventPublisher, mongoTemplate);
 
     private VisitaDocument visitaFinalizada(String id) {
         return VisitaDocument.builder()
@@ -60,7 +63,7 @@ class FeedbackServiceImplTest {
 
     @BeforeEach
     void setup() {
-        when(visitaConsulta.findByStatusAndSaidaBefore(any(), any())).thenReturn(List.of());
+        when(visitaRepository.findByStatusAndSaidaBefore(any(), any())).thenReturn(List.of());
         when(feedbackRepository.findByVisitaIdIn(any())).thenReturn(List.of());
     }
 
@@ -89,7 +92,7 @@ class FeedbackServiceImplTest {
     void processarSemRespostaMarcaSoQuemNaoTemFeedbackEmUmaUnicaConsultaEmLote() {
         VisitaDocument comFeedback = visitaFinalizada("v1");
         VisitaDocument semFeedback = visitaFinalizada("v2");
-        when(visitaConsulta.findByStatusAndSaidaBefore(any(), any()))
+        when(visitaRepository.findByStatusAndSaidaBefore(any(), any()))
                 .thenReturn(List.of(comFeedback, semFeedback));
         when(feedbackRepository.findByVisitaIdIn(any()))
                 .thenReturn(List.of(FeedbackDocument.builder().visitaId("v1").build()));
@@ -108,9 +111,20 @@ class FeedbackServiceImplTest {
         assertThat((org.bson.Document) update.getValue().getUpdateObject().get("$set"))
                 .containsEntry("status", StatusVisita.SEM_FEEDBACK);
         // A visita só é lida (sem write-back pelo repositório): nada além da consulta em lote.
-        verify(visitaConsulta).findByStatusAndSaidaBefore(any(), any());
-        verifyNoMoreInteractions(visitaConsulta);
+        verify(visitaRepository).findByStatusAndSaidaBefore(any(), any());
+        verifyNoMoreInteractions(visitaRepository);
         verify(feedbackRepository, never()).existsByVisitaId(anyString());
+    }
+
+    @Test
+    void processarSemRespostaNaoAtualizaNadaQuandoTodasAsVisitasJaTemFeedback() {
+        when(visitaRepository.findByStatusAndSaidaBefore(any(), any())).thenReturn(List.of(visitaFinalizada("v1")));
+        when(feedbackRepository.findByVisitaIdIn(any()))
+                .thenReturn(List.of(FeedbackDocument.builder().visitaId("v1").build()));
+
+        service.processarSemResposta();
+
+        verify(mongoTemplate, never()).updateMulti(any(org.springframework.data.mongodb.core.query.Query.class), any(), any(Class.class));
     }
 
     @Test
@@ -136,7 +150,7 @@ class FeedbackServiceImplTest {
      */
     @Test
     void criarConvertDuplicateKeyExceptionEmConflito() {
-        when(visitaConsulta.findById("v1"))
+        when(visitaRepository.findById("v1"))
                 .thenReturn(Optional.of(visitaEncerradaHa("v1", StatusVisita.FINALIZADA, Duration.ofMinutes(30))));
         when(feedbackRepository.existsByVisitaId("v1")).thenReturn(false);
         when(feedbackRepository.save(any())).thenThrow(new DuplicateKeyException("chave duplicada"));
@@ -184,7 +198,7 @@ class FeedbackServiceImplTest {
 
     @Test
     void criarRecusaFeedbackDeOutroUsuarioNaVisitaLogada() {
-        when(visitaConsulta.findById("v1"))
+        when(visitaRepository.findById("v1"))
                 .thenReturn(Optional.of(visitaEncerradaHa("v1", StatusVisita.FINALIZADA, Duration.ofMinutes(30))));
 
         FeedbackRequest pedido = request("v1");
@@ -201,7 +215,7 @@ class FeedbackServiceImplTest {
 
     @Test
     void criarRecusaFeedbackAnonimoSemOAparelhoDono() {
-        when(visitaConsulta.findById("v1")).thenReturn(Optional.of(criarVisitaAnonimaEncerrada("v1", "anon-dono")));
+        when(visitaRepository.findById("v1")).thenReturn(Optional.of(criarVisitaAnonimaEncerrada("v1", "anon-dono")));
 
         FeedbackRequest pedido = criarRequestDoAparelho("v1", null);
         assertThatThrownBy(() -> service.criar(pedido, null))
@@ -216,7 +230,7 @@ class FeedbackServiceImplTest {
     void criarRecusaEstranhoAntesDeRevelarOStatusDaVisita() {
         VisitaDocument emAndamento = criarVisitaAnonimaEncerrada("v1", "anon-dono");
         emAndamento.setStatus(StatusVisita.EM_ATENDIMENTO);
-        when(visitaConsulta.findById("v1")).thenReturn(Optional.of(emAndamento));
+        when(visitaRepository.findById("v1")).thenReturn(Optional.of(emAndamento));
 
         // Para o estranho, a visita em andamento dá o mesmo 403 que a encerrada.
         FeedbackRequest pedido = criarRequestDoAparelho("v1", "anon-intruso");
@@ -226,7 +240,7 @@ class FeedbackServiceImplTest {
 
     @Test
     void criarAceitaFeedbackAnonimoDoAparelhoDono() {
-        when(visitaConsulta.findById("v1")).thenReturn(Optional.of(criarVisitaAnonimaEncerrada("v1", "anon-dono")));
+        when(visitaRepository.findById("v1")).thenReturn(Optional.of(criarVisitaAnonimaEncerrada("v1", "anon-dono")));
         when(feedbackRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         FeedbackResponse resposta = service.criar(criarRequestDoAparelho("v1", "anon-dono"), null);
@@ -235,13 +249,13 @@ class FeedbackServiceImplTest {
         assertThat(resposta.anonimizado()).isTrue();
         // Sem dono logado não há quem edite: o app não oferece o botão.
         assertThat(resposta.editavelAte()).isNull();
-        verify(hospitalConsulta, never()).findById(any());
+        verify(hospitalRepository, never()).findById(any());
     }
 
     @Test
     void criarRecusaVisitaAnonimaSemAparelhoGravado() {
         // Conta excluída (M-041) apaga o aparelho das visitas: ninguém mais é dono delas.
-        when(visitaConsulta.findById("v1")).thenReturn(Optional.of(criarVisitaAnonimaEncerrada("v1", null)));
+        when(visitaRepository.findById("v1")).thenReturn(Optional.of(criarVisitaAnonimaEncerrada("v1", null)));
 
         FeedbackRequest pedido = criarRequestDoAparelho("v1", "anon-qualquer");
         assertThatThrownBy(() -> service.criar(pedido, null))
@@ -268,7 +282,7 @@ class FeedbackServiceImplTest {
      */
     @Test
     void criarAceitaVisitaEncerradaPorGpsInterrompido() {
-        when(visitaConsulta.findById("v1"))
+        when(visitaRepository.findById("v1"))
                 .thenReturn(Optional.of(visitaEncerradaHa("v1", StatusVisita.GPS_INTERROMPIDO, Duration.ofHours(3))));
         when(feedbackRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -277,7 +291,7 @@ class FeedbackServiceImplTest {
 
     @Test
     void criarRecusaVisitaComJanelaDe24hEncerrada() {
-        when(visitaConsulta.findById("v1"))
+        when(visitaRepository.findById("v1"))
                 .thenReturn(Optional.of(visitaEncerradaHa("v1", StatusVisita.GPS_INTERROMPIDO, Duration.ofHours(25))));
 
         FeedbackRequest pedido = request("v1");
@@ -289,7 +303,7 @@ class FeedbackServiceImplTest {
 
     @Test
     void criarRecusaVisitaAindaEmAndamento() {
-        when(visitaConsulta.findById("v1"))
+        when(visitaRepository.findById("v1"))
                 .thenReturn(Optional.of(visitaEncerradaHa("v1", StatusVisita.EM_ATENDIMENTO, Duration.ZERO)));
 
         FeedbackRequest pedido = request("v1");
@@ -303,12 +317,12 @@ class FeedbackServiceImplTest {
         VisitaDocument pendente = visitaEncerradaHa("v2", StatusVisita.GPS_INTERROMPIDO, Duration.ofHours(2));
         VisitaDocument curta = visitaEncerradaHa("v3", StatusVisita.FINALIZADA, Duration.ofHours(1));
         curta.setDuracaoMinutos(1);
-        when(visitaConsulta.findByUsuarioIdAndStatusInAndSaidaAfterOrderBySaidaDesc(
+        when(visitaRepository.findByUsuarioIdAndStatusInAndSaidaAfterOrderBySaidaDesc(
                 eq("u1"), eq(List.of(StatusVisita.FINALIZADA, StatusVisita.GPS_INTERROMPIDO)), any()))
                 .thenReturn(List.of(respondida, pendente, curta));
         when(feedbackRepository.findByVisitaIdIn(List.of("v1", "v2")))
                 .thenReturn(List.of(FeedbackDocument.builder().visitaId("v1").build()));
-        when(hospitalConsulta.findAllById(List.of("h1")))
+        when(hospitalRepository.findAllById(List.of("h1")))
                 .thenReturn(List.of(HospitalDocument.builder().id("h1").nome("HRAN").build()));
 
         List<FeedbackPendenteResponse> pendentes = service.pendentes("u1");
@@ -322,21 +336,21 @@ class FeedbackServiceImplTest {
 
     @Test
     void pendentesSemCandidatasNaoConsultaFeedbacksNemHospitais() {
-        when(visitaConsulta.findByUsuarioIdAndStatusInAndSaidaAfterOrderBySaidaDesc(any(), any(), any()))
+        when(visitaRepository.findByUsuarioIdAndStatusInAndSaidaAfterOrderBySaidaDesc(any(), any(), any()))
                 .thenReturn(List.of());
 
         assertThat(service.pendentes("u1")).isEmpty();
         verify(feedbackRepository, never()).findByVisitaIdIn(any());
-        verify(hospitalConsulta, never()).findAllById(any());
+        verify(hospitalRepository, never()).findAllById(any());
     }
 
     @Test
     void pendentesToleraHospitalSemNome() {
         VisitaDocument pendente = visitaEncerradaHa("v1", StatusVisita.FINALIZADA, Duration.ofHours(1));
-        when(visitaConsulta.findByUsuarioIdAndStatusInAndSaidaAfterOrderBySaidaDesc(any(), any(), any()))
+        when(visitaRepository.findByUsuarioIdAndStatusInAndSaidaAfterOrderBySaidaDesc(any(), any(), any()))
                 .thenReturn(List.of(pendente));
         when(feedbackRepository.findByVisitaIdIn(any())).thenReturn(List.of());
-        when(hospitalConsulta.findAllById(List.of("h1")))
+        when(hospitalRepository.findAllById(List.of("h1")))
                 .thenReturn(List.of(HospitalDocument.builder().id("h1").nome(null).build()));
 
         assertThat(service.pendentes("u1")).singleElement()
@@ -356,7 +370,7 @@ class FeedbackServiceImplTest {
         Instant criadoEm = Instant.now().minus(Duration.ofDays(14));
         when(feedbackRepository.findById("f1")).thenReturn(Optional.of(feedbackDoDono(criadoEm)));
         when(feedbackRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-        when(hospitalConsulta.findById("h1"))
+        when(hospitalRepository.findById("h1"))
                 .thenReturn(Optional.of(HospitalDocument.builder().id("h1").nome("HRAN").build()));
 
         FeedbackResponse resposta = service.atualizar("f1", request("v1"), "u1");
@@ -367,7 +381,7 @@ class FeedbackServiceImplTest {
         org.mockito.ArgumentCaptor<FeedbackDocument> salvo = org.mockito.ArgumentCaptor.forClass(FeedbackDocument.class);
         verify(feedbackRepository).save(salvo.capture());
         assertThat(salvo.getValue().getEditadoEm()).isNotNull();
-        verify(eventPublisher).publishEvent(any(br.com.saude_monitor.api.indicador.event.FeedbackSalvoEvent.class));
+        verify(eventPublisher).publishEvent(any(br.com.saude_monitor.api.feedback.event.FeedbackSalvoEvent.class));
     }
 
     @Test
@@ -438,7 +452,7 @@ class FeedbackServiceImplTest {
                 .id("f3").visitaId("v3").usuarioId("u1").hospitalId("h1").nota(3).criadoEm(criadoEm).build();
         when(feedbackRepository.findByUsuarioIdOrderByCriadoEmDesc(eq("u1"), any()))
                 .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(doHran, doHbase, outroDoHran)));
-        when(hospitalConsulta.findAllById(List.of("h1", "h2"))).thenReturn(List.of(
+        when(hospitalRepository.findAllById(List.of("h1", "h2"))).thenReturn(List.of(
                 HospitalDocument.builder().id("h1").nome("HRAN").build(),
                 HospitalDocument.builder().id("h2").nome("HBase").build()));
 
@@ -447,7 +461,7 @@ class FeedbackServiceImplTest {
         assertThat(itens).extracting(FeedbackResponse::hospitalNome).containsExactly("HRAN", "HBase", "HRAN");
         assertThat(itens).extracting(FeedbackResponse::editavelAte)
                 .containsOnly(criadoEm.plus(Duration.ofDays(15)));
-        verify(hospitalConsulta, never()).findById(any());
+        verify(hospitalRepository, never()).findById(any());
     }
 
     @Test
@@ -456,14 +470,14 @@ class FeedbackServiceImplTest {
                 .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of()));
 
         assertThat(service.historico("u1", 0, 20).content()).isEmpty();
-        verify(hospitalConsulta, never()).findAllById(any());
+        verify(hospitalRepository, never()).findAllById(any());
     }
 
     @Test
     void buscarPorVisitaDoDonoTrazNomeDoHospitalEPrazo() {
         Instant criadoEm = Instant.now();
         when(feedbackRepository.findByVisitaId("v1")).thenReturn(Optional.of(feedbackDoDono(criadoEm)));
-        when(hospitalConsulta.findById("h1")).thenReturn(Optional.empty());
+        when(hospitalRepository.findById("h1")).thenReturn(Optional.empty());
 
         FeedbackResponse resposta = service.buscarPorVisita("v1", "u1").orElseThrow();
 
@@ -478,6 +492,6 @@ class FeedbackServiceImplTest {
         when(feedbackRepository.findByVisitaId("v1")).thenReturn(Optional.of(semHospital));
 
         assertThat(service.buscarPorVisita("v1", "u1").orElseThrow().hospitalNome()).isNull();
-        verify(hospitalConsulta, never()).findById(any());
+        verify(hospitalRepository, never()).findById(any());
     }
 }

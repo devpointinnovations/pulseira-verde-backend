@@ -1,5 +1,7 @@
 package br.com.saude_monitor.api.hospital.migration;
 
+import lombok.Builder;
+
 /**
  * Registro bruto de um estabelecimento de saúde lido da fonte de importação
  * (CSV/JSON no padrão CNES do SUS).
@@ -8,6 +10,7 @@ package br.com.saude_monitor.api.hospital.migration;
  * A modelagem final do esquema (responsabilidade do agente Rafael) pode redefinir os
  * nomes de colunas; este record centraliza o contrato de entrada para facilitar o ajuste.</p>
  */
+@Builder
 public record EstabelecimentoSaudeRaw(
         String codigoCnes,
         String cnpj,
