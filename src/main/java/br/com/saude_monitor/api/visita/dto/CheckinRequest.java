@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 import java.time.Instant;
+import lombok.Builder;
 
 /**
  * Requisição de check-in (entrada) de visita — {@code POST /api/v1/visitas/checkin} (§3.3).
@@ -20,6 +21,7 @@ import java.time.Instant;
  * hospital. É opcional e não confiável por definição (o endpoint é público, OPS-03), por
  * isso a camada de serviço só o aceita dentro de uma janela passada limitada.</p>
  */
+@Builder
 public record CheckinRequest(
         @NotBlank String hospitalId,
         @NotNull OrigemVisita origem,

@@ -165,7 +165,13 @@ class VisitaServiceImplTest {
 
     @Test
     void checkinAnonimoSemDispositivoIdLancaErro() {
-        CheckinRequest request = new CheckinRequest("h1", OrigemVisita.MANUAL, null, null, null);
+        CheckinRequest request = CheckinRequest.builder()
+                .hospitalId("h1")
+                .origem(OrigemVisita.MANUAL)
+                .posicao(null)
+                .dispositivoId(null)
+                .ocorridoEm(null)
+                .build();
 
         assertThrows(ValidacaoNegocioException.class, () -> visitaService.checkin(request, null));
         verify(visitaRepository, never()).save(any(VisitaDocument.class));
@@ -182,7 +188,13 @@ class VisitaServiceImplTest {
             return v;
         });
 
-        CheckinRequest request = new CheckinRequest("h1", OrigemVisita.MANUAL, null, "anon-abc", null);
+        CheckinRequest request = CheckinRequest.builder()
+                .hospitalId("h1")
+                .origem(OrigemVisita.MANUAL)
+                .posicao(null)
+                .dispositivoId("anon-abc")
+                .ocorridoEm(null)
+                .build();
         CheckinResponse resposta = visitaService.checkin(request, null);
 
         assertTrue(resposta.criado());
@@ -197,7 +209,13 @@ class VisitaServiceImplTest {
                 "anon-abc", List.of(StatusVisita.EM_ATENDIMENTO, StatusVisita.SUSPEITA)))
                 .thenReturn(Optional.of(visitaAtivaAnonima("anon-abc")));
 
-        CheckinRequest request = new CheckinRequest("h2", OrigemVisita.MANUAL, null, "anon-abc", null);
+        CheckinRequest request = CheckinRequest.builder()
+                .hospitalId("h2")
+                .origem(OrigemVisita.MANUAL)
+                .posicao(null)
+                .dispositivoId("anon-abc")
+                .ocorridoEm(null)
+                .build();
 
         assertThrows(ConflitoException.class, () -> visitaService.checkin(request, null));
         verify(visitaRepository, never()).save(any(VisitaDocument.class));
@@ -213,7 +231,13 @@ class VisitaServiceImplTest {
         when(visitaRepository.save(any(VisitaDocument.class))).thenThrow(duplicataDaVisitaAtiva());
 
         CheckinResponse resposta = visitaService.checkin(
-                new CheckinRequest("h1", OrigemVisita.MANUAL, null, "anon-abc", null), null);
+                CheckinRequest.builder()
+                        .hospitalId("h1")
+                        .origem(OrigemVisita.MANUAL)
+                        .posicao(null)
+                        .dispositivoId("anon-abc")
+                        .ocorridoEm(null)
+                        .build(), null);
 
         assertFalse(resposta.criado());
         assertEquals("v1", resposta.id());
@@ -227,7 +251,13 @@ class VisitaServiceImplTest {
         when(visitaRepository.save(any(VisitaDocument.class)))
                 .thenThrow(new DuplicateKeyException("E11000 index: outro_indice dup key"));
 
-        CheckinRequest request = new CheckinRequest("h1", OrigemVisita.MANUAL, null, null, null);
+        CheckinRequest request = CheckinRequest.builder()
+                .hospitalId("h1")
+                .origem(OrigemVisita.MANUAL)
+                .posicao(null)
+                .dispositivoId(null)
+                .ocorridoEm(null)
+                .build();
 
         assertThrows(DuplicateKeyException.class, () -> visitaService.checkin(request, "u1"));
     }
@@ -245,7 +275,13 @@ class VisitaServiceImplTest {
                 .thenReturn(Optional.empty(), Optional.of(vencedora));
         when(visitaRepository.save(any(VisitaDocument.class))).thenThrow(duplicataDaVisitaAtiva());
 
-        CheckinRequest request = new CheckinRequest("h2", OrigemVisita.MANUAL, null, null, null);
+        CheckinRequest request = CheckinRequest.builder()
+                .hospitalId("h2")
+                .origem(OrigemVisita.MANUAL)
+                .posicao(null)
+                .dispositivoId(null)
+                .ocorridoEm(null)
+                .build();
 
         assertThrows(ConflitoException.class, () -> visitaService.checkin(request, "u1"));
     }
@@ -257,7 +293,13 @@ class VisitaServiceImplTest {
                 .thenReturn(Optional.empty());
         when(visitaRepository.save(any(VisitaDocument.class))).thenThrow(duplicataDaVisitaAtiva());
 
-        CheckinRequest request = new CheckinRequest("h1", OrigemVisita.MANUAL, null, null, null);
+        CheckinRequest request = CheckinRequest.builder()
+                .hospitalId("h1")
+                .origem(OrigemVisita.MANUAL)
+                .posicao(null)
+                .dispositivoId(null)
+                .ocorridoEm(null)
+                .build();
 
         assertThrows(ConflitoException.class, () -> visitaService.checkin(request, "u1"));
     }
@@ -284,7 +326,13 @@ class VisitaServiceImplTest {
 
         Instant entradaReal = Instant.now().minus(Duration.ofHours(2));
         CheckinRequest request =
-                new CheckinRequest("h1", OrigemVisita.MANUAL, null, "anon-abc", entradaReal);
+                CheckinRequest.builder()
+                        .hospitalId("h1")
+                        .origem(OrigemVisita.MANUAL)
+                        .posicao(null)
+                        .dispositivoId("anon-abc")
+                        .ocorridoEm(entradaReal)
+                        .build();
 
         CheckinResponse resposta = visitaService.checkin(request, null);
 
@@ -300,7 +348,13 @@ class VisitaServiceImplTest {
 
         Instant futuro = Instant.now().plus(Duration.ofDays(1));
         CheckinRequest request =
-                new CheckinRequest("h1", OrigemVisita.MANUAL, null, "anon-abc", futuro);
+                CheckinRequest.builder()
+                        .hospitalId("h1")
+                        .origem(OrigemVisita.MANUAL)
+                        .posicao(null)
+                        .dispositivoId("anon-abc")
+                        .ocorridoEm(futuro)
+                        .build();
 
         CheckinResponse resposta = visitaService.checkin(request, null);
 
@@ -316,7 +370,13 @@ class VisitaServiceImplTest {
 
         Instant antigo = Instant.now().minus(Duration.ofDays(3));
         CheckinRequest request =
-                new CheckinRequest("h1", OrigemVisita.MANUAL, null, "anon-abc", antigo);
+                CheckinRequest.builder()
+                        .hospitalId("h1")
+                        .origem(OrigemVisita.MANUAL)
+                        .posicao(null)
+                        .dispositivoId("anon-abc")
+                        .ocorridoEm(antigo)
+                        .build();
 
         CheckinResponse resposta = visitaService.checkin(request, null);
 
@@ -338,7 +398,13 @@ class VisitaServiceImplTest {
 
         Instant saidaReal = entrada.plus(Duration.ofMinutes(45));
         CheckoutResponse resposta =
-                visitaService.checkout("v9", new CheckoutRequest(null, null, null, saidaReal, null), "u1");
+                visitaService.checkout("v9", CheckoutRequest.builder()
+                        .posicao(null)
+                        .gpsIndisponivel(null)
+                        .encerramentoManual(null)
+                        .ocorridoEm(saidaReal)
+                        .dispositivoId(null)
+                        .build(), "u1");
 
         assertEquals(saidaReal, resposta.saida());
         assertEquals(45, resposta.duracaoMinutos());
@@ -357,7 +423,13 @@ class VisitaServiceImplTest {
                 .build();
         when(visitaRepository.findById("v9")).thenReturn(Optional.of(visitaDeOutro));
 
-        CheckoutRequest semAparelho = new CheckoutRequest(null, null, null, null, null);
+        CheckoutRequest semAparelho = CheckoutRequest.builder()
+                .posicao(null)
+                .gpsIndisponivel(null)
+                .encerramentoManual(null)
+                .ocorridoEm(null)
+                .dispositivoId(null)
+                .build();
         assertThrows(AcessoNegadoException.class, () -> visitaService.checkout("v9", semAparelho, "invasor"));
         verify(mongoTemplate, never()).findAndModify(any(Query.class), any(Update.class),
                 any(FindAndModifyOptions.class), eq(VisitaDocument.class));
@@ -380,7 +452,13 @@ class VisitaServiceImplTest {
         // envenenaria a mediana de permanência (RN-15).
         Instant saidaImpossivel = entrada.minus(Duration.ofMinutes(30));
         CheckoutResponse resposta =
-                visitaService.checkout("v9", new CheckoutRequest(null, null, null, saidaImpossivel, null), "u1");
+                visitaService.checkout("v9", CheckoutRequest.builder()
+                        .posicao(null)
+                        .gpsIndisponivel(null)
+                        .encerramentoManual(null)
+                        .ocorridoEm(saidaImpossivel)
+                        .dispositivoId(null)
+                        .build(), "u1");
 
         assertEquals(entrada, resposta.saida());
         assertEquals(0, resposta.duracaoMinutos());
@@ -422,11 +500,23 @@ class VisitaServiceImplTest {
         visita.setPontosAmostrais(new java.util.ArrayList<>());
         when(visitaRepository.findById("v9")).thenReturn(Optional.of(visita));
 
-        CheckoutRequest doIntruso = new CheckoutRequest(null, null, null, null, "anon-x");
+        CheckoutRequest doIntruso = CheckoutRequest.builder()
+                .posicao(null)
+                .gpsIndisponivel(null)
+                .encerramentoManual(null)
+                .ocorridoEm(null)
+                .dispositivoId("anon-x")
+                .build();
         assertThrows(AcessoNegadoException.class, () -> visitaService.checkout("v9", doIntruso, null));
 
         CheckoutResponse resposta =
-                visitaService.checkout("v9", new CheckoutRequest(null, null, null, null, "anon-dono"), null);
+                visitaService.checkout("v9", CheckoutRequest.builder()
+                        .posicao(null)
+                        .gpsIndisponivel(null)
+                        .encerramentoManual(null)
+                        .ocorridoEm(null)
+                        .dispositivoId("anon-dono")
+                        .build(), null);
         assertEquals(StatusVisita.FINALIZADA, resposta.status());
     }
 
@@ -565,7 +655,13 @@ class VisitaServiceImplTest {
         when(mongoTemplate.findAndModify(any(Query.class), any(Update.class),
                 any(FindAndModifyOptions.class), eq(VisitaDocument.class))).thenReturn(null);
 
-        CheckoutRequest pedido = new CheckoutRequest(null, null, null, null, null);
+        CheckoutRequest pedido = CheckoutRequest.builder()
+                .posicao(null)
+                .gpsIndisponivel(null)
+                .encerramentoManual(null)
+                .ocorridoEm(null)
+                .dispositivoId(null)
+                .build();
         assertThrows(ConflitoException.class, () -> visitaService.checkout("v9", pedido, "u1"));
     }
 
@@ -576,7 +672,13 @@ class VisitaServiceImplTest {
         when(visitaRepository.findById("v9")).thenReturn(Optional.of(visita));
 
         CheckoutResponse resposta = visitaService.checkout(
-                "v9", new CheckoutRequest(POSICAO, null, true, null, null), "u1");
+                "v9", CheckoutRequest.builder()
+                        .posicao(POSICAO)
+                        .gpsIndisponivel(null)
+                        .encerramentoManual(true)
+                        .ocorridoEm(null)
+                        .dispositivoId(null)
+                        .build(), "u1");
 
         assertEquals(StatusVisita.FINALIZADA, resposta.status());
         assertTrue(resposta.encerramentoManual());
@@ -774,7 +876,13 @@ class VisitaServiceImplTest {
     }
 
     private static CheckoutRequest checkoutComHoraReal(Instant ocorridoEm) {
-        return new CheckoutRequest(null, null, null, ocorridoEm, null);
+        return CheckoutRequest.builder()
+                .posicao(null)
+                .gpsIndisponivel(null)
+                .encerramentoManual(null)
+                .ocorridoEm(ocorridoEm)
+                .dispositivoId(null)
+                .build();
     }
 
     @Test
@@ -813,7 +921,13 @@ class VisitaServiceImplTest {
         VisitaDocument visita = visitaEncerradaPeloJob(entrada);
         when(visitaRepository.findById("v9")).thenReturn(Optional.of(visita));
 
-        CheckoutRequest naoEstouAqui = new CheckoutRequest(null, null, true, entrada.plus(Duration.ofMinutes(12)), null);
+        CheckoutRequest naoEstouAqui = CheckoutRequest.builder()
+                .posicao(null)
+                .gpsIndisponivel(null)
+                .encerramentoManual(true)
+                .ocorridoEm(entrada.plus(Duration.ofMinutes(12)))
+                .dispositivoId(null)
+                .build();
         CheckoutResponse resposta = visitaService.checkout("v9", naoEstouAqui, "u1");
 
         assertTrue(resposta.encerramentoManual());
@@ -864,7 +978,13 @@ class VisitaServiceImplTest {
     void checkoutAtrasadoComGpsIndisponivelConfirmaOGpsInterrompido() {
         when(visitaRepository.findById("v9")).thenReturn(Optional.of(visitaEncerradaPeloJob(Instant.now().minus(Duration.ofHours(1)))));
 
-        CheckoutRequest semGps = new CheckoutRequest(null, true, null, Instant.now().minus(Duration.ofMinutes(20)), null);
+        CheckoutRequest semGps = CheckoutRequest.builder()
+                .posicao(null)
+                .gpsIndisponivel(true)
+                .encerramentoManual(null)
+                .ocorridoEm(Instant.now().minus(Duration.ofMinutes(20)))
+                .dispositivoId(null)
+                .build();
         assertThrows(ConflitoException.class, () -> visitaService.checkout("v9", semGps, "u1"));
     }
 

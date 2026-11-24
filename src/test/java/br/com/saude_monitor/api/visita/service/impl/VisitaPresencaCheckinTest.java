@@ -54,7 +54,13 @@ class VisitaPresencaCheckinTest {
     }
 
     private VisitaDocument fazerCheckin(OrigemVisita origem, PosicaoDto posicao, Instant ocorridoEm) {
-        visitaService.checkin(new CheckinRequest("h1", origem, posicao, "anon-1", ocorridoEm), null);
+        visitaService.checkin(CheckinRequest.builder()
+                .hospitalId("h1")
+                .origem(origem)
+                .posicao(posicao)
+                .dispositivoId("anon-1")
+                .ocorridoEm(ocorridoEm)
+                .build(), null);
         ArgumentCaptor<VisitaDocument> salva = ArgumentCaptor.forClass(VisitaDocument.class);
         verify(visitaRepository).save(salva.capture());
         return salva.getValue();
