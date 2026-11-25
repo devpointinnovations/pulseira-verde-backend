@@ -98,6 +98,13 @@ public class VisitaDocument {
      */
     private Boolean presencaComprovada;
 
+    /**
+     * Ids dos outros hospitais cujo geofence também continha a posição do check-in por GEOFENCE
+     * (E2-04/RN-05). É a lista de trocas que o usuário pode pedir enquanto a visita está ativa;
+     * vazia ou {@code null} quando o geofence era de um hospital só.
+     */
+    private List<String> hospitaisAlternativos;
+
     @Builder.Default
     private List<PontoAmostralDocument> pontosAmostrais = new ArrayList<>();
 

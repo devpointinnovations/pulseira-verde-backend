@@ -19,6 +19,7 @@ import br.com.saude_monitor.api.visita.dto.CheckoutResponse;
 import br.com.saude_monitor.api.visita.dto.HeartbeatResponse;
 import br.com.saude_monitor.api.visita.dto.PosicaoDto;
 import br.com.saude_monitor.api.visita.dto.TipoPermanenciaRequest;
+import br.com.saude_monitor.api.visita.dto.TrocaHospitalRequest;
 import br.com.saude_monitor.api.visita.document.TipoPermanencia;
 import br.com.saude_monitor.api.visita.dto.VisitaAtivaResponse;
 import br.com.saude_monitor.api.visita.dto.VisitaResponse;
@@ -119,6 +120,12 @@ class VisitaServiceImplTest {
                 case "ultimaPosicaoEm" -> v.setUltimaPosicaoEm((Instant) valor);
                 case "usuarioId" -> v.setUsuarioId((String) valor);
                 case "tipoPermanencia" -> v.setTipoPermanencia((TipoPermanencia) valor);
+                case "hospitalId" -> v.setHospitalId((String) valor);
+                case "hospitaisAlternativos" -> {
+                    @SuppressWarnings("unchecked")
+                    List<String> ids = (List<String>) valor;
+                    v.setHospitaisAlternativos(ids);
+                }
                 case "encerradaSemSinal" -> v.setEncerradaSemSinal((Boolean) valor);
                 default -> throw new IllegalArgumentException("campo não previsto no teste: " + campo);
             }
@@ -479,6 +486,68 @@ class VisitaServiceImplTest {
                 () -> visitaService.heartbeat("v9", "u-qualquer", null, null));
         // O filtro de dono vai no próprio update: nada foi gravado na visita.
         assertNull(visita.getUltimoHeartbeat());
+    }
+
+    private VisitaDocument visitaComAlternativas() {
+        VisitaDocument visita = visitaAtivaAnonima("anon-dono");
+        visita.setHospitaisAlternativos(new java.util.ArrayList<>(List.of("h2")));
+        when(visitaRepository.findById("v9")).thenReturn(Optional.of(visita));
+        when(hospitalRepository.findById("h2")).thenReturn(Optional.of(hospitalAtivo("h2")));
+        return visita;
+    }
+
+    @Test
+    void trocarHospitalMudaAVisitaParaUmaAlternativaEGuardaOAnteriorParaVoltar() {
+        VisitaDocument visita = visitaComAlternativas();
+
+        CheckinResponse resposta = visitaService.trocarHospital("v9", new TrocaHospitalRequest("h2", "anon-dono"), null);
+
+        assertEquals("h2", resposta.hospitalId());
+        assertEquals("h2", visita.getHospitalId());
+        assertEquals(List.of("h1"), visita.getHospitaisAlternativos());
+        assertEquals(visita.getEntrada(), resposta.entrada());
+    }
+
+    @Test
+    void trocarParaOMesmoHospitalNaoMudaNada() {
+        VisitaDocument visita = visitaComAlternativas();
+
+        assertEquals("h1", visitaService.trocarHospital("v9", new TrocaHospitalRequest("h1", "anon-dono"), null).hospitalId());
+        assertEquals(List.of("h2"), visita.getHospitaisAlternativos());
+    }
+
+    @Test
+    void trocarParaHospitalQueNaoEraAlternativaLancaErroDeNegocio() {
+        visitaComAlternativas();
+
+        assertThrows(ValidacaoNegocioException.class,
+                () -> visitaService.trocarHospital("v9", new TrocaHospitalRequest("h9", "anon-dono"), null));
+    }
+
+    @Test
+    void trocarHospitalDeVisitaSemAlternativasLancaErroDeNegocio() {
+        VisitaDocument visita = visitaAtivaAnonima("anon-dono");
+        when(visitaRepository.findById("v9")).thenReturn(Optional.of(visita));
+
+        assertThrows(ValidacaoNegocioException.class,
+                () -> visitaService.trocarHospital("v9", new TrocaHospitalRequest("h2", "anon-dono"), null));
+    }
+
+    @Test
+    void trocarHospitalExigeODispositivoDono() {
+        visitaComAlternativas();
+
+        assertThrows(AcessoNegadoException.class,
+                () -> visitaService.trocarHospital("v9", new TrocaHospitalRequest("h2", "anon-x"), null));
+    }
+
+    @Test
+    void trocarHospitalDeVisitaEncerradaLancaConflito() {
+        VisitaDocument visita = visitaComAlternativas();
+        visita.setStatus(StatusVisita.FINALIZADA);
+
+        assertThrows(ConflitoException.class,
+                () -> visitaService.trocarHospital("v9", new TrocaHospitalRequest("h2", "anon-dono"), null));
     }
 
     @Test

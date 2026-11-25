@@ -20,6 +20,10 @@ import lombok.Builder;
  * indicador de tempo de permanência passaria a medir a rede do aparelho, não a fila do
  * hospital. É opcional e não confiável por definição (o endpoint é público, OPS-03), por
  * isso a camada de serviço só o aceita dentro de uma janela passada limitada.</p>
+ *
+ * <p>{@code escolhidoNoDesempate = true} (só com {@code origem = GEOFENCE}) diz que o usuário
+ * escolheu {@code hospitalId} entre os candidatos de um empate de geofences (E2-04/RN-05): o
+ * serviço usa essa escolha, desde que o hospital contenha a {@code posicao} informada.</p>
  */
 @Builder
 public record CheckinRequest(
@@ -27,6 +31,7 @@ public record CheckinRequest(
         @NotNull OrigemVisita origem,
         @Valid PosicaoDto posicao,
         String dispositivoId,
-        Instant ocorridoEm
+        Instant ocorridoEm,
+        Boolean escolhidoNoDesempate
 ) {
 }

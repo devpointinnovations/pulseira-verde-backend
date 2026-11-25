@@ -22,12 +22,14 @@ import br.com.saude_monitor.api.visita.dto.CheckoutResponse;
 import br.com.saude_monitor.api.visita.dto.HeartbeatResponse;
 import br.com.saude_monitor.api.visita.dto.PosicaoDto;
 import br.com.saude_monitor.api.visita.dto.TipoPermanenciaRequest;
+import br.com.saude_monitor.api.visita.dto.TrocaHospitalRequest;
 import br.com.saude_monitor.api.visita.dto.TipoPermanenciaResponse;
 import br.com.saude_monitor.api.visita.dto.VisitaAtivaResponse;
 import br.com.saude_monitor.api.visita.dto.VisitaResponse;
 import br.com.saude_monitor.api.visita.repository.VisitaRepository;
 import br.com.saude_monitor.api.visita.seed.VisitaAtivaUnicaRunner;
 import br.com.saude_monitor.api.visita.service.ConflitoGeofenceException;
+import br.com.saude_monitor.api.visita.service.ResolucaoGeofence;
 import br.com.saude_monitor.api.visita.service.PresencaVisita;
 import br.com.saude_monitor.api.visita.service.VisitaDono;
 import br.com.saude_monitor.api.visita.service.VisitaService;
@@ -45,6 +47,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -117,9 +120,10 @@ public class VisitaServiceImpl implements VisitaService {
                     "É necessário estar autenticado ou informar dispositivoId para check-in anônimo.");
         }
 
-        String hospitalId = request.origem() == OrigemVisita.GEOFENCE
-                ? resolverHospitalPorGeofence(request.hospitalId(), request.posicao())
-                : exigirHospitalAtivo(request.hospitalId());
+        ResolucaoGeofence resolucao = request.origem() == OrigemVisita.GEOFENCE
+                ? resolverHospitalPorGeofence(request)
+                : new ResolucaoGeofence(exigirHospitalAtivo(request.hospitalId()), List.of());
+        String hospitalId = resolucao.hospitalId();
 
         VisitaDocument existente = buscarVisitaAtiva(usuarioId, request.dispositivoId());
         if (existente != null) {
@@ -139,6 +143,7 @@ public class VisitaServiceImpl implements VisitaService {
                 .tipoPermanencia(TipoPermanencia.ATENDIMENTO)
                 .ultimoHeartbeat(agora)
                 .origem(request.origem())
+                .hospitaisAlternativos(resolucao.alternativas().stream().map(CandidatoGeofence::hospitalId).toList())
                 .criadoEm(agora)
                 // SEG-01: o GEOFENCE já validou a posição acima; o MANUAL continua aceito em
                 // qualquer lugar, mas só conta no indicador se a posição estiver no hospital.
@@ -173,6 +178,7 @@ public class VisitaServiceImpl implements VisitaService {
                 .entrada(salva.getEntrada())
                 .status(salva.getStatus())
                 .criado(true)
+                .alternativas(resolucao.alternativas())
                 .build();
     }
 
@@ -195,12 +201,41 @@ public class VisitaServiceImpl implements VisitaService {
             throw new ConflitoException(
                     "Você já possui um check-in ativo em outro hospital. Finalize-o antes de iniciar uma nova visita.");
         }
+        return respostaDaVisita(existente);
+    }
+
+    @Override
+    public CheckinResponse trocarHospital(String id, TrocaHospitalRequest request, String usuarioId) {
+        VisitaDocument visita = obterVisitaAtivaDoDono(id, usuarioId, request.dispositivoId());
+        String novo = request.hospitalId();
+
+        if (visita.getHospitalId().equals(novo)) {
+            return respostaDaVisita(visita);
+        }
+        List<String> alternativos = visita.getHospitaisAlternativos() == null ? List.of() : visita.getHospitaisAlternativos();
+        if (!alternativos.contains(novo)) {
+            throw new ValidacaoNegocioException("A visita só pode ser trocada para um hospital que continha o local do check-in.");
+        }
+        exigirHospitalAtivo(novo);
+
+        // O hospital anterior passa a ser alternativa, para a pessoa poder voltar atrás.
+        List<String> restantes = new ArrayList<>(alternativos);
+        restantes.remove(novo);
+        restantes.add(visita.getHospitalId());
+        Update update = new Update()
+                .set("hospitalId", novo)
+                .set("hospitaisAlternativos", restantes);
+        return respostaDaVisita(atualizarSeAtiva(id, update));
+    }
+
+    private static CheckinResponse respostaDaVisita(VisitaDocument visita) {
         return CheckinResponse.builder()
-                .id(existente.getId())
-                .hospitalId(existente.getHospitalId())
-                .entrada(existente.getEntrada())
-                .status(existente.getStatus())
+                .id(visita.getId())
+                .hospitalId(visita.getHospitalId())
+                .entrada(visita.getEntrada())
+                .status(visita.getStatus())
                 .criado(false)
+                .alternativas(List.of())
                 .build();
     }
 
@@ -474,9 +509,11 @@ public class VisitaServiceImpl implements VisitaService {
     /**
      * Valida que o ponto informado está dentro de ao menos um geofence ativo e resolve
      * o hospital correto em caso de sobreposição, escolhendo o de centroide mais próximo
-     * do ponto (E2-04/RN-05).
+     * do ponto (E2-04/RN-05). Quando o usuário já escolheu no empate
+     * ({@code escolhidoNoDesempate}), vale a escolha, desde que o hospital contenha o ponto.
      */
-    private String resolverHospitalPorGeofence(String hospitalIdSugerido, PosicaoDto posicao) {
+    private ResolucaoGeofence resolverHospitalPorGeofence(CheckinRequest request) {
+        PosicaoDto posicao = request.posicao();
         if (posicao == null) {
             throw new ValidacaoNegocioException("posicao é obrigatória para check-in via GEOFENCE.");
         }
@@ -487,35 +524,46 @@ public class VisitaServiceImpl implements VisitaService {
         if (candidatos.isEmpty()) {
             throw new ValidacaoNegocioException("A posição informada não está dentro do geofence de nenhum hospital.");
         }
-        if (candidatos.size() == 1) {
-            return candidatos.getFirst().id();
-        }
 
-        // Sobreposição de geofences (E2-04/RN-05): ordena por distância ao centroide.
+        // Ordena por distância ao centroide (E2-04/RN-05); com um só candidato não há o que ordenar.
         List<HospitalNoPonto> ordenados = candidatos.stream()
                 .sorted(Comparator.comparingDouble(h -> distanciaMetros(ponto, h.localizacao())))
                 .toList();
 
-        HospitalNoPonto maisProximo = ordenados.getFirst();
-        HospitalNoPonto segundo = ordenados.get(1);
-        double d1 = distanciaMetros(ponto, maisProximo.localizacao());
-        double d2 = distanciaMetros(ponto, segundo.localizacao());
-
-        // Empate (diferença ≤ 10m): não cria a visita; devolve candidatos para o app perguntar em 1 toque.
-        if (Math.abs(d1 - d2) <= LIMITE_EMPATE_METROS) {
-            List<CandidatoGeofence> candidatosResposta = ordenados.stream()
-                    .map(h -> CandidatoGeofence.builder()
-                            .hospitalId(h.id())
-                            .nome(h.nome())
-                            .distanciaMetros(distanciaMetros(ponto, h.localizacao()))
-                            .build())
-                    .toList();
-            throw new ConflitoGeofenceException(
-                    "A posição está dentro de mais de um geofence com distâncias equivalentes. Escolha o hospital.",
-                    candidatosResposta);
+        String escolhido;
+        if (Boolean.TRUE.equals(request.escolhidoNoDesempate())) {
+            if (ordenados.stream().noneMatch(h -> h.id().equals(request.hospitalId()))) {
+                throw new ValidacaoNegocioException("A posição informada não está dentro do geofence do hospital escolhido.");
+            }
+            escolhido = request.hospitalId();
+        } else {
+            escolhido = ordenados.getFirst().id();
+            // Empate (diferença ≤ 10m): não cria a visita; devolve candidatos para o app perguntar em 1 toque.
+            if (ordenados.size() > 1 && isEmpate(ponto, ordenados.get(0), ordenados.get(1))) {
+                throw new ConflitoGeofenceException(
+                        "A posição está dentro de mais de um geofence com distâncias equivalentes. Escolha o hospital.",
+                        ordenados.stream().map(h -> paraCandidato(ponto, h)).toList());
+            }
         }
 
-        return maisProximo.id();
+        return new ResolucaoGeofence(escolhido, ordenados.stream()
+                .filter(h -> !h.id().equals(escolhido))
+                .map(h -> paraCandidato(ponto, h))
+                .toList());
+    }
+
+    private boolean isEmpate(GeoJsonPoint ponto, HospitalNoPonto maisProximo, HospitalNoPonto segundo) {
+        double d1 = distanciaMetros(ponto, maisProximo.localizacao());
+        double d2 = distanciaMetros(ponto, segundo.localizacao());
+        return Math.abs(d1 - d2) <= LIMITE_EMPATE_METROS;
+    }
+
+    private CandidatoGeofence paraCandidato(GeoJsonPoint ponto, HospitalNoPonto hospital) {
+        return CandidatoGeofence.builder()
+                .hospitalId(hospital.id())
+                .nome(hospital.nome())
+                .distanciaMetros(distanciaMetros(ponto, hospital.localizacao()))
+                .build();
     }
 
     /** A posição está dentro do geofence deste hospital? Sem posição, não (SEG-01). */
