@@ -1,0 +1,86 @@
+# Pre-release "dev": cada deploy de dev (push na `develop`) atualiza uma GitHub Release.
+#
+# Pedido do PO em 25/11/2026: as versoes de dev tambem aparecem na aba Releases, ao lado
+# das rcs de homologacao. E UMA Release so, rolante, com a tag `dev`: a cada deploy ela e
+# apagada e recriada no commit novo. Uma tag por deploy encheria a lista de tags.
+#
+# Pre-release de proposito (nunca "latest"), sem anexo: o backend nao tem arquivo para
+# baixar, a entrega e a imagem no Artifact Registry. A tag `dev` nao casa com `v*-rc.*`,
+# entao o calculo das rcs de homologacao (cd-homologacao.yml) nao a ve.
+#
+# Workflow separado, disparado por `workflow_run`: o cd-backend-google.yml tambem e
+# chamado pela homologacao, e mexer nele arriscaria a rc.
+name: Release - Pré-release DEV
+
+on:
+  workflow_run:
+    workflows: ['CD - Backend (Google Cloud Run)']
+    types: [completed]
+    branches: [develop]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-dev
+  cancel-in-progress: false
+
+env:
+  API_URL_DEV: https://saude-monitor-backend-dev-uly57kmmia-rj.a.run.app
+
+jobs:
+  prerelease:
+    name: Pré-release dev
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      # Se a develop ja andou, este deploy e velho: o do commit mais novo publica a dele.
+      - name: Conferir que este é o commit mais novo da develop
+        id: atual
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          PONTA=$(git ls-remote "https://github.com/$GITHUB_REPOSITORY" refs/heads/develop | cut -f1)
+          if [ "$PONTA" != "$SHA" ]; then
+            echo "⏭️ develop já está em \`${PONTA:0:7}\`; \`${SHA:0:7}\` fica sem Release dev." >> "$GITHUB_STEP_SUMMARY"
+            echo "pular=sim" >> "$GITHUB_OUTPUT"
+          else
+            echo "pular=nao" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Recriar a pré-release dev
+        if: steps.atual.outputs.pular == 'nao'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          # Texto do commit e dado externo: so entra por variavel de ambiente.
+          MENSAGEM: ${{ github.event.workflow_run.head_commit.message }}
+        run: |
+          set -euo pipefail
+          TITULO_COMMIT=$(printf '%s' "$MENSAGEM" | head -n1)
+
+          {
+            echo "## Pulseira Verde Backend DEV"
+            echo ""
+            echo "Versão de **desenvolvimento**, substituída a cada deploy na \`develop\`. Não é a versão de homologação (essas são as \`v1.0.0-rc.N\`)."
+            echo ""
+            echo "- **Backend de dev:** $API_URL_DEV"
+            echo "- **Commit:** \`${SHA:0:7}\` — $TITULO_COMMIT (imagem no Artifact Registry com esta SHA)"
+            echo "- **Deploy:** $RUN_URL"
+          } > notas.md
+
+          # Apaga a Release e a tag anteriores (se houver) e recria no commit novo.
+          gh release delete dev --cleanup-tag --yes -R "$GITHUB_REPOSITORY" || true
+          gh release create dev \
+            -R "$GITHUB_REPOSITORY" \
+            --target "$SHA" \
+            --prerelease \
+            --latest=false \
+            --title "Pulseira Verde Backend DEV (${SHA:0:7})" \
+            --notes-file notas.md
+
+          echo "📦 [dev](https://github.com/$GITHUB_REPOSITORY/releases/tag/dev) → \`${SHA:0:7}\`." >> "$GITHUB_STEP_SUMMARY"
