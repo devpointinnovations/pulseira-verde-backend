@@ -9,6 +9,7 @@ import br.com.saude_monitor.api.visita.dto.HeartbeatResponse;
 import br.com.saude_monitor.api.visita.dto.PosicaoDto;
 import br.com.saude_monitor.api.visita.dto.TipoPermanenciaRequest;
 import br.com.saude_monitor.api.visita.dto.TipoPermanenciaResponse;
+import br.com.saude_monitor.api.visita.dto.TrocaHospitalRequest;
 import br.com.saude_monitor.api.visita.dto.VisitaAtivaResponse;
 import br.com.saude_monitor.api.visita.dto.VisitaResponse;
 
@@ -25,6 +26,12 @@ public interface VisitaService {
     java.time.Duration PRAZO_VINCULO_PESSOAL = java.time.Duration.ofDays(90);
 
     CheckinResponse checkin(CheckinRequest request, String usuarioId);
+
+    /**
+     * Troca o hospital de uma visita ativa por um dos que continham o local do check-in por
+     * GEOFENCE (E2-04/RN-05). A entrada e o restante da visita não mudam.
+     */
+    CheckinResponse trocarHospital(String id, TrocaHospitalRequest request, String usuarioId);
 
     CheckoutResponse checkout(String id, CheckoutRequest request, String usuarioId);
 

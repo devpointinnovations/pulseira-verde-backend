@@ -32,12 +32,12 @@ class VisitaDtoJsonTest {
 
     @Test
     void checkinResponseSerializaNaOrdemDoContrato() throws Exception {
-        CheckinResponse porConstrutor = new CheckinResponse("v1", "h1", T0, StatusVisita.EM_ATENDIMENTO, true);
+        CheckinResponse porConstrutor = new CheckinResponse("v1", "h1", T0, StatusVisita.EM_ATENDIMENTO, true, List.of());
         CheckinResponse porBuilder = CheckinResponse.builder()
-                .id("v1").hospitalId("h1").entrada(T0).status(StatusVisita.EM_ATENDIMENTO).criado(true).build();
+                .id("v1").hospitalId("h1").entrada(T0).status(StatusVisita.EM_ATENDIMENTO).criado(true).alternativas(List.of()).build();
 
         String esperado = "{\"id\":\"v1\",\"hospitalId\":\"h1\",\"entrada\":\"2026-11-23T12:00:00Z\","
-                + "\"status\":\"EM_ATENDIMENTO\",\"criado\":true}";
+                + "\"status\":\"EM_ATENDIMENTO\",\"criado\":true,\"alternativas\":[]}";
         assertThat(json(porConstrutor)).isEqualTo(esperado);
         assertThat(json(porBuilder)).isEqualTo(esperado);
     }

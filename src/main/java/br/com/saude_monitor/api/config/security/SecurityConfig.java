@@ -81,6 +81,7 @@ public class SecurityConfig {
                         // Consulta da visita ativa também é anônima via dispositivoId (modo sem login).
                         .requestMatchers(HttpMethod.POST, "/api/v1/visitas/checkin",
                                 "/api/v1/visitas/*/checkout", "/api/v1/visitas/*/heartbeat").permitAll()
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/visitas/*/hospital").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/visitas/ativas").permitAll()
                         // Exceção PÚBLICA (spec §3.2 / E1-05): sugestão anônima de hospital.
                         // Deve vir ANTES da regra genérica de POST admin (a ordem importa).
