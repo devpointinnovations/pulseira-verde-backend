@@ -11,6 +11,7 @@ import br.com.saude_monitor.api.visita.dto.HeartbeatResponse;
 import br.com.saude_monitor.api.visita.dto.PosicaoDto;
 import br.com.saude_monitor.api.visita.dto.TipoPermanenciaRequest;
 import br.com.saude_monitor.api.visita.dto.TipoPermanenciaResponse;
+import br.com.saude_monitor.api.visita.dto.TrocaHospitalRequest;
 import br.com.saude_monitor.api.visita.dto.VisitaAtivaResponse;
 import br.com.saude_monitor.api.visita.service.VisitaService;
 import io.swagger.v3.oas.annotations.security.SecurityRequirements;
@@ -47,6 +48,15 @@ public class VisitaController {
         // 201 para visita nova; 200 para retorno idempotente de visita ativa já existente (RN-03/§3.3).
         HttpStatus status = resposta.criado() ? HttpStatus.CREATED : HttpStatus.OK;
         return ResponseEntity.status(status).body(resposta);
+    }
+
+    /** 🔓/🔒 Troca o hospital da visita ativa por um dos que se sobrepunham no check-in (E2-04/RN-05). */
+    @PatchMapping("/api/v1/visitas/{id}/hospital")
+    @SecurityRequirements
+    public ResponseEntity<CheckinResponse> trocarHospital(@PathVariable String id,
+                                                          @Valid @RequestBody TrocaHospitalRequest request) {
+        String usuarioId = autenticacaoHelper.usuarioIdAtual().orElse(null);
+        return ResponseEntity.ok(visitaService.trocarHospital(id, request, usuarioId));
     }
 
     /** 🔓/🔒 Registra saída (E2-02/E2-05). */

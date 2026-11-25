@@ -8,6 +8,7 @@ import br.com.saude_monitor.api.visita.document.OrigemVisita;
 import br.com.saude_monitor.api.visita.document.VisitaDocument;
 import br.com.saude_monitor.api.visita.dto.CandidatoGeofence;
 import br.com.saude_monitor.api.visita.dto.CheckinRequest;
+import br.com.saude_monitor.api.visita.dto.CheckinResponse;
 import br.com.saude_monitor.api.visita.dto.PosicaoDto;
 import br.com.saude_monitor.api.visita.repository.VisitaRepository;
 import br.com.saude_monitor.api.visita.service.ConflitoGeofenceException;
@@ -26,7 +27,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /** Resolução do hospital no check-in por GEOFENCE: um candidato, o mais próximo e o empate (E2-01, E2-04, RN-05). */
@@ -35,11 +38,12 @@ class VisitaGeofenceCheckinTest {
     private static final PosicaoDto POSICAO = new PosicaoDto("Point", List.of(-48.0742, -15.9023));
 
     private VisitaServiceImpl visitaService;
+    private VisitaRepository visitaRepository;
     private MongoTemplate mongoTemplate;
 
     @BeforeEach
     void setup() {
-        VisitaRepository visitaRepository = mock(VisitaRepository.class);
+        visitaRepository = mock(VisitaRepository.class);
         mongoTemplate = mock(MongoTemplate.class);
         visitaService = new VisitaServiceImpl(visitaRepository,
                 new HospitalConsulta(mock(HospitalRepository.class), mongoTemplate), mongoTemplate);
@@ -106,5 +110,55 @@ class VisitaGeofenceCheckinTest {
         assertEquals(List.of("h1", "h2"), candidatos.stream().map(CandidatoGeofence::hospitalId).toList());
         assertEquals("Hospital h1", candidatos.getFirst().nome());
         assertTrue(candidatos.getFirst().distanciaMetros() <= candidatos.getLast().distanciaMetros());
+    }
+
+    @Test
+    void checkinPorGeofenceComUmSoCandidatoNaoTemAlternativas() {
+        geofencesQueContemOPonto(hospital("h1", -48.0742, -15.9023));
+
+        assertTrue(visitaService.checkin(checkinGeofence(POSICAO), null).alternativas().isEmpty());
+    }
+
+    @Test
+    void checkinPorGeofenceComSobreposicaoDevolveEGuardaOsOutrosHospitaisComoAlternativas() {
+        geofencesQueContemOPonto(hospital("h2", -48.0742, -15.9123), hospital("h1", -48.0742, -15.9023));
+
+        CheckinResponse resposta = visitaService.checkin(checkinGeofence(POSICAO), null);
+
+        assertEquals(List.of("h2"), resposta.alternativas().stream().map(CandidatoGeofence::hospitalId).toList());
+        assertEquals("Hospital h2", resposta.alternativas().getFirst().nome());
+        verify(visitaRepository).save(argThat((VisitaDocument v) -> List.of("h2").equals(v.getHospitaisAlternativos())));
+    }
+
+    @Test
+    void checkinEscolhidoNoDesempateUsaAEscolhaDoUsuarioEDevolveOOutroComoAlternativa() {
+        geofencesQueContemOPonto(hospital("h2", -48.07421, -15.9023), hospital("h1", -48.0742, -15.9023));
+        CheckinRequest escolha = CheckinRequest.builder()
+                .hospitalId("h2").origem(OrigemVisita.GEOFENCE).posicao(POSICAO)
+                .dispositivoId("anon-1").escolhidoNoDesempate(true).build();
+
+        CheckinResponse resposta = visitaService.checkin(escolha, null);
+
+        assertEquals("h2", resposta.hospitalId());
+        assertEquals(List.of("h1"), resposta.alternativas().stream().map(CandidatoGeofence::hospitalId).toList());
+    }
+
+    @Test
+    void checkinEscolhidoNoDesempateForaDosCandidatosLancaErroDeNegocio() {
+        geofencesQueContemOPonto(hospital("h2", -48.07421, -15.9023), hospital("h1", -48.0742, -15.9023));
+        CheckinRequest escolha = CheckinRequest.builder()
+                .hospitalId("h9").origem(OrigemVisita.GEOFENCE).posicao(POSICAO)
+                .dispositivoId("anon-1").escolhidoNoDesempate(true).build();
+
+        assertThrows(ValidacaoNegocioException.class, () -> visitaService.checkin(escolha, null));
+    }
+
+    @Test
+    void hospitalSugeridoSemEscolhaDoUsuarioNaoSobrepoeOMaisProximo() {
+        geofencesQueContemOPonto(hospital("h2", -48.0742, -15.9123), hospital("h1", -48.0742, -15.9023));
+        CheckinRequest comSugestao = CheckinRequest.builder()
+                .hospitalId("h2").origem(OrigemVisita.GEOFENCE).posicao(POSICAO).dispositivoId("anon-1").build();
+
+        assertEquals("h1", visitaService.checkin(comSugestao, null).hospitalId());
     }
 }
