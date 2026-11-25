@@ -301,3 +301,5 @@ jobs:
             exit 1
           fi
           head -c 400 /tmp/raio.json
+
+# 25/11/2026: o sucesso deste workflow na develop dispara o release-dev.yml (pré-release dev na aba Releases).
